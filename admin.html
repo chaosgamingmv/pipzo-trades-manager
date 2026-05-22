@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Pipzo Admin</title>
+  <link rel="stylesheet" href="assets/css/admin.css">
+</head>
+<body>
+  <header>
+    <h1>Pipzo Admin</h1>
+    <span>License Manager</span>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Admin Login</h2>
+      <p class="muted">Enter your admin password to generate and view keys.</p>
+      <input id="adminPassword" type="password" placeholder="Admin password">
+      <button id="loginBtn">Unlock Admin</button>
+      <p id="loginMsg" class="message"></p>
+    </section>
+
+    <section id="adminPanel" class="hidden">
+      <section class="card">
+        <h2>Generate License Key</h2>
+        <div class="grid">
+          <label>
+            Label / Friend Name
+            <input id="label" placeholder="Example: Ahmed">
+          </label>
+
+          <label>
+            Valid Until
+            <input id="validUntil" type="date">
+          </label>
+
+          <label>
+            Account Type
+            <select id="accountType">
+              <option value="both">Demo + Real</option>
+              <option value="demo">Demo Only</option>
+              <option value="real">Real Only</option>
+            </select>
+          </label>
+
+          <button id="generateBtn">Generate Key</button>
+        </div>
+
+        <div id="generatedKey" class="generated hidden"></div>
+      </section>
+
+      <section class="card">
+        <h2>License Keys</h2>
+        <button id="refreshBtn">Refresh Keys</button>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Label</th>
+                <th>Telegram</th>
+                <th>MT5 Account</th>
+                <th>Type</th>
+                <th>Valid Until</th>
+                <th>Active</th>
+              </tr>
+            </thead>
+            <tbody id="keysTable"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="assets/js/admin.js"></script>
+</body>
+</html>
