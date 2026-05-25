@@ -178,6 +178,22 @@ async function handleActivate(req, res, supabase) {
     });
   }
 
+  const { data: existingUserLicense, error: existingUserLicenseError } = await supabase
+    .from('license_keys')
+    .select('license_key, valid_until')
+    .eq('telegram_id', telegramId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (existingUserLicenseError) throw existingUserLicenseError;
+
+  if (existingUserLicense && existingUserLicense.license_key !== licenseKey) {
+    return json(res, 403, {
+      ok: false,
+      message: 'You already have an active license linked to this Telegram account.'
+    });
+  }
+
   const { data: license, error: licenseError } = await supabase
     .from('license_keys')
     .select('*')
@@ -313,6 +329,36 @@ async function handleRequestLicense(req, res, supabase) {
     return json(res, 500, {
       ok: false,
       message: 'Telegram bot token is not configured.'
+    });
+  }
+
+  const { data: existingLicense, error: existingLicenseError } = await supabase
+    .from('license_keys')
+    .select('license_key, valid_until')
+    .eq('telegram_id', telegramId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (existingLicenseError) throw existingLicenseError;
+
+  if (existingLicense && new Date(existingLicense.valid_until).getTime() > Date.now()) {
+    const existingMessage =
+`✅ You already have an active Pipzo license
+
+Your license key is:
+
+${existingLicense.license_key}
+
+Valid Until: ${new Date(existingLicense.valid_until).toLocaleDateString('en-GB')}
+
+Open the Pipzo Mini App and paste this key to continue.`;
+
+    await sendTelegramMessage(telegramId, existingMessage);
+
+    return json(res, 200, {
+      ok: true,
+      message: 'You already have an active license. I sent it to your Telegram.',
+      license: existingLicense
     });
   }
 
@@ -902,6 +948,11 @@ async function handleSaveMt5Account(req, res, supabase) {
     mt5_server: String(mt5_server).trim(),
     is_active: true,
     connection_status: 'pending',
+    assigned_worker_id: null,
+    assigned_terminal_dir: null,
+    worker_pid: null,
+    claimed_at: null,
+    last_worker_heartbeat: null,
     last_error: null,
     updated_at: new Date().toISOString()
   };
@@ -1074,6 +1125,168 @@ async function handleWorkerGetNextAccount(req, res, supabase) {
   });
 }
 
+async function handleWorkerClaimNextAccount(req, res, supabase) {
+  if (!requireEaSecret(req, res)) return;
+
+  const {
+    worker_id = '',
+    base_terminal_dir = ''
+  } = req.body || {};
+
+  const workerId = String(worker_id).trim();
+
+  if (!workerId) {
+    return json(res, 400, {
+      ok: false,
+      message: 'worker_id required'
+    });
+  }
+
+  const staleTime = new Date(Date.now() - 60 * 1000).toISOString();
+
+  const { data: candidates, error: candidateError } = await supabase
+    .from('mt5_accounts')
+    .select('*')
+    .eq('is_active', true)
+    .or(`assigned_worker_id.is.null,connection_status.eq.pending,connection_status.eq.failed,last_worker_heartbeat.lt.${staleTime}`)
+    .order('updated_at', {
+      ascending: true
+    })
+    .limit(10);
+
+  if (candidateError) throw candidateError;
+
+  if (!candidates || candidates.length === 0) {
+    return json(res, 404, {
+      ok: false,
+      message: 'No pending MT5 account found'
+    });
+  }
+
+  for (const account of candidates) {
+    const { data: license, error: licenseError } = await supabase
+      .from('license_keys')
+      .select('*')
+      .eq('license_key', account.license_key)
+      .maybeSingle();
+
+    if (licenseError) throw licenseError;
+
+    if (!license || !license.is_active || new Date(license.valid_until).getTime() < Date.now()) {
+      continue;
+    }
+
+    const terminalDir = base_terminal_dir
+      ? `${base_terminal_dir}\\${account.mt5_login}`
+      : account.assigned_terminal_dir;
+
+    const { data: updated, error: updateError } = await supabase
+      .from('mt5_accounts')
+      .update({
+        assigned_worker_id: workerId,
+        assigned_terminal_dir: terminalDir,
+        connection_status: 'claimed',
+        claimed_at: new Date().toISOString(),
+        last_worker_heartbeat: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', account.id)
+      .select('*')
+      .single();
+
+    if (updateError) throw updateError;
+
+    return json(res, 200, {
+      ok: true,
+      account: {
+        id: updated.id,
+        license_key: updated.license_key,
+        mt5_login: updated.mt5_login,
+        mt5_password: updated.mt5_password,
+        mt5_server: updated.mt5_server,
+        telegram_username: updated.telegram_username,
+        assigned_terminal_dir: updated.assigned_terminal_dir
+      }
+    });
+  }
+
+  return json(res, 404, {
+    ok: false,
+    message: 'No valid active account found'
+  });
+}
+
+async function handleWorkerListAssignedAccounts(req, res, supabase) {
+  if (!requireEaSecret(req, res)) return;
+
+  const { worker_id = '' } = req.body || {};
+  const workerId = String(worker_id).trim();
+
+  if (!workerId) {
+    return json(res, 400, {
+      ok: false,
+      message: 'worker_id required'
+    });
+  }
+
+  const { data, error } = await supabase
+    .from('mt5_accounts')
+    .select('id, license_key, mt5_login, mt5_server, telegram_username, connection_status, assigned_terminal_dir, worker_pid, last_worker_heartbeat')
+    .eq('assigned_worker_id', workerId)
+    .eq('is_active', true)
+    .order('updated_at', {
+      ascending: true
+    });
+
+  if (error) throw error;
+
+  return json(res, 200, {
+    ok: true,
+    accounts: data || []
+  });
+}
+
+async function handleWorkerHeartbeat(req, res, supabase) {
+  if (!requireEaSecret(req, res)) return;
+
+  const {
+    license_key = '',
+    worker_id = '',
+    worker_pid = null,
+    connection_status = 'running'
+  } = req.body || {};
+
+  const licenseKey = String(license_key).trim();
+  const workerId = String(worker_id).trim();
+
+  if (!licenseKey || !workerId) {
+    return json(res, 400, {
+      ok: false,
+      message: 'license_key and worker_id required'
+    });
+  }
+
+  const { data, error } = await supabase
+    .from('mt5_accounts')
+    .update({
+      assigned_worker_id: workerId,
+      worker_pid,
+      connection_status,
+      last_worker_heartbeat: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+    .eq('license_key', licenseKey)
+    .select('id, license_key, connection_status, last_worker_heartbeat')
+    .single();
+
+  if (error) throw error;
+
+  return json(res, 200, {
+    ok: true,
+    account: data
+  });
+}
+
 async function handleWorkerUpdateAccountStatus(req, res, supabase) {
   if (!requireEaSecret(req, res)) return;
 
@@ -1151,8 +1364,12 @@ export default async function handler(req, res) {
 
     if (route === 'save_mt5_account') return await handleSaveMt5Account(req, res, supabase);
     if (route === 'get_mt5_account') return await handleGetMt5Account(req, res, supabase);
+
     if (route === 'worker_get_account') return await handleWorkerGetAccount(req, res, supabase);
     if (route === 'worker_get_next_account') return await handleWorkerGetNextAccount(req, res, supabase);
+    if (route === 'worker_claim_next_account') return await handleWorkerClaimNextAccount(req, res, supabase);
+    if (route === 'worker_list_assigned_accounts') return await handleWorkerListAssignedAccounts(req, res, supabase);
+    if (route === 'worker_heartbeat') return await handleWorkerHeartbeat(req, res, supabase);
     if (route === 'worker_update_account_status') return await handleWorkerUpdateAccountStatus(req, res, supabase);
 
     return json(res, 404, {
