@@ -1,41 +1,39 @@
-# Pipzo Cloud Mode Update
+# Pipzo Mini App Dashboard Update
 
-This update adds MT5 Account Connection inside the Telegram Mini App.
+This update redesigns the Telegram Mini App flow.
 
-## What this adds
+## Changes
 
-* New Supabase table: `mt5\_accounts`
-* New Mini App section: Connect MT5 Account
-* New Vercel API routes:
+1. Removed command logs from the Mini App.
+2. Added professional dashboard look.
+3. Shows Telegram username and profile picture on top right.
+4. First screen is License Access:
+   - Enter license key
+   - Request license key
+   - Choose demo / real / demo+real request type
+5. After activation, dashboard opens.
+6. Dashboard lets user connect MT5 account.
+7. After account details are saved, trade manager buttons are shown.
+8. Profile picture opens a menu with Logout.
+9. Trade manager section is ready for more options later.
 
-  * `/api/save\_mt5\_account`
-  * `/api/get\_mt5\_account`
-  * `/api/worker\_get\_account`
-* Updated VM worker:
+## Files to replace
 
-  * Can fetch MT5 account details from Vercel/Supabase
-  * Can login to MT5 using saved login/password/server
-  * Can still use `.env` fallback for testing
+Replace in your Vercel project:
 
-## Important Security Note
+```text
+index.html
+assets/js/app.js
+assets/css/style.css
+```
 
-This starter stores MT5 passwords in Supabase. For testing, this is okay.
-Before using with real users, add encryption for passwords.
+## Optional API addition
 
-Recommended production upgrade:
+If you want "Request License Key" to save requests to Supabase:
 
-* Encrypt MT5 password before storing
-* Store encryption key only in Vercel environment variables
-* Never show password in admin or logs
-* Add delete account access button
+1. Run `sql/license_requests.sql` in Supabase.
+2. Add the handler code from `api/request-license-handler.txt` into your single `api/[route].js`.
+3. Add this route inside the main handler:
+   `if (route === 'request_license') return await handleRequestLicense(req, res, supabase);`
 
-## Install
-
-1. Run `sql/cloud\_mode\_update.sql` in Supabase SQL Editor.
-2. Add the new API files from `/api` into your Vercel project `/api`.
-3. Replace your Mini App `index.html` and `assets/js/app.js` with the updated ones or manually patch the section.
-4. Replace your worker with `worker/pipzo\_cloud\_worker.py`.
-5. Push to GitHub and redeploy Vercel.
-
-test push
-
+If you skip the optional API addition, the request form will show a message asking user to contact admin manually.

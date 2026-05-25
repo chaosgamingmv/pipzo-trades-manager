@@ -1,0 +1,41 @@
+// Add this function inside api/[route].js
+
+async function handleRequestLicense(req, res, supabase) {
+  const { initData = '', request_type = 'both', note = '' } = req.body || {};
+
+  if (!['demo', 'real', 'both'].includes(request_type)) {
+    return json(res, 400, { ok: false, message: 'Invalid request type' });
+  }
+
+  const tg = validateTelegramInitData(initData);
+  if (!tg.ok) return json(res, 401, tg);
+
+  const telegramId = String(tg.user?.id || '');
+  const username = String(tg.user?.username || '');
+  const firstName = String(tg.user?.first_name || '');
+
+  const { data, error } = await supabase
+    .from('license_requests')
+    .insert({
+      telegram_id: telegramId,
+      telegram_username: username,
+      first_name: firstName,
+      request_type,
+      note,
+      status: 'pending'
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return json(res, 200, {
+    ok: true,
+    message: 'License request sent. Admin will review it.',
+    request: data
+  });
+}
+
+// Then add this route in the main handler:
+
+if (route === 'request_license') return await handleRequestLicense(req, res, supabase);
