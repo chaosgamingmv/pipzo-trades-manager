@@ -23,9 +23,9 @@ const menuName = document.getElementById('menuName');
 const menuUsername = document.getElementById('menuUsername');
 const logoutBtn = document.getElementById('logoutBtn');
 
-const accountStep = document.getElementById('accountStep');
-const tradeManagerStep = document.getElementById('tradeManagerStep');
-const accountStatusPill = document.getElementById('accountStatusPill');
+const accountSection = document.getElementById('accountSection');
+const tradeManagerSection = document.getElementById('tradeManagerSection');
+const accountPill = document.getElementById('accountPill');
 
 let pendingCommand = null;
 let selectedRequestType = 'both';
@@ -85,9 +85,14 @@ async function api(path, data = {}) {
 async function checkMe() {
   setupProfile();
 
+  if (localStorage.getItem('pipzo_logged_out') === 'yes') {
+    showScreen(licenseScreen);
+    return;
+  }
+
   const res = await api('me');
 
-  if (res.ok && res.user && res.user.license_key && localStorage.getItem('pipzo_logged_out') !== 'yes') {
+  if (res.ok && res.user && res.user.license_key) {
     showScreen(dashboardScreen);
     await loadMt5Account();
     await loadStatus();
@@ -116,7 +121,7 @@ activateBtn.addEventListener('click', async () => {
   activateBtn.textContent = 'Continue';
 
   if (res.ok) {
-    activateMsg.textContent = 'License activated.';
+    activateMsg.textContent = '';
     showScreen(dashboardScreen);
     await loadMt5Account();
     await loadStatus();
@@ -125,13 +130,14 @@ activateBtn.addEventListener('click', async () => {
   }
 });
 
-document.getElementById('showRequestBtn').addEventListener('click', () => {
-  document.getElementById('requestBox').classList.toggle('hidden');
+document.getElementById('toggleRequestBtn').addEventListener('click', () => {
+  const panel = document.getElementById('requestPanel');
+  panel.classList.toggle('hidden');
 });
 
-document.querySelectorAll('.seg-option').forEach(btn => {
+document.querySelectorAll('.choice').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.seg-option').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.choice').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     selectedRequestType = btn.dataset.requestType;
   });
@@ -156,10 +162,8 @@ document.getElementById('requestLicenseBtn').addEventListener('click', async () 
 
   if (res.ok) {
     msg.textContent = 'Request sent. Admin will review it.';
-  } else if (res.message && res.message.includes('not found')) {
-    msg.textContent = 'Request API is not enabled yet. Please contact admin for a license key.';
   } else {
-    msg.textContent = res.message || 'Could not send request. Contact admin.';
+    msg.textContent = res.message || 'Request option is not enabled yet. Contact admin for a key.';
   }
 });
 
@@ -172,6 +176,14 @@ logoutBtn.addEventListener('click', () => {
   profileMenu.classList.add('hidden');
   document.getElementById('licenseKey').value = '';
   showScreen(licenseScreen);
+});
+
+document.addEventListener('click', (e) => {
+  if (!profileMenu.classList.contains('hidden')) {
+    if (!profileMenu.contains(e.target) && !profileBtn.contains(e.target)) {
+      profileMenu.classList.add('hidden');
+    }
+  }
 });
 
 document.getElementById('saveMt5Btn').addEventListener('click', async () => {
@@ -209,29 +221,29 @@ document.getElementById('saveMt5Btn').addEventListener('click', async () => {
 });
 
 document.getElementById('editAccountBtn').addEventListener('click', () => {
-  accountStep.classList.remove('hidden');
-  tradeManagerStep.classList.add('hidden');
+  accountSection.classList.remove('hidden');
+  tradeManagerSection.classList.add('hidden');
 });
 
 async function loadMt5Account() {
-  const card = document.getElementById('mt5AccountStatus');
+  const card = document.getElementById('accountSummary');
 
   const res = await api('get_mt5_account');
 
   if (!res.ok || !res.account) {
     card.innerHTML = '<span>No MT5 account connected yet.</span>';
-    accountStatusPill.textContent = 'Pending';
-    accountStatusPill.className = 'pill pending';
-    accountStep.classList.remove('hidden');
-    tradeManagerStep.classList.add('hidden');
+    accountPill.textContent = 'Pending';
+    accountPill.className = 'pill pending';
+    accountSection.classList.remove('hidden');
+    tradeManagerSection.classList.add('hidden');
     return;
   }
 
   const a = res.account;
   const status = a.connection_status || 'pending';
 
-  accountStatusPill.textContent = status;
-  accountStatusPill.className = `pill ${status === 'connected' ? 'connected' : status === 'failed' ? 'failed' : 'pending'}`;
+  accountPill.textContent = status;
+  accountPill.className = `pill ${status === 'connected' ? 'connected' : status === 'failed' ? 'failed' : 'pending'}`;
 
   card.innerHTML = `
     <b>MT5 Account</b>
@@ -242,11 +254,11 @@ async function loadMt5Account() {
   `;
 
   if (status === 'connected') {
-    accountStep.classList.add('hidden');
-    tradeManagerStep.classList.remove('hidden');
+    accountSection.classList.add('hidden');
+    tradeManagerSection.classList.remove('hidden');
   } else {
-    accountStep.classList.remove('hidden');
-    tradeManagerStep.classList.add('hidden');
+    accountSection.classList.remove('hidden');
+    tradeManagerSection.classList.add('hidden');
   }
 }
 
@@ -316,10 +328,10 @@ document.getElementById('yesConfirm').addEventListener('click', async () => {
 async function loadStatus() {
   const res = await api('status');
   const s = res.status;
-  const badge = document.getElementById('onlineBadge');
+  const badge = document.getElementById('workerStatus');
 
   if (!s) {
-    badge.className = 'status-text offline';
+    badge.className = 'status-off';
     badge.textContent = 'Offline';
     return;
   }
@@ -327,7 +339,7 @@ async function loadStatus() {
   const lastSeen = new Date(s.last_seen).getTime();
   const online = Date.now() - lastSeen < 30000;
 
-  badge.className = 'status-text ' + (online ? 'online' : 'offline');
+  badge.className = online ? 'status-on' : 'status-off';
   badge.textContent = online ? 'Online' : 'Offline';
 
   document.getElementById('balance').textContent = money(s.balance);

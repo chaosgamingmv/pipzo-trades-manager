@@ -2,217 +2,209 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
   <title>Pipzo Trade Manager</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="assets/css/style.css" />
 </head>
 <body>
-  <div class="app-shell">
-    <!-- License Access -->
+  <main class="app">
+    <!-- LICENSE SCREEN -->
     <section id="licenseScreen" class="screen active">
-      <div class="brand-block">
-        <div class="brand-logo">PZ</div>
-        <p class="eyebrow">Pipzo Cloud Mode</p>
+      <div class="auth-hero">
+        <div class="logo-mark">PZ</div>
+        <p class="kicker">Pipzo Cloud Mode</p>
         <h1>Trade Manager</h1>
-        <p class="muted">Control your MT5 trades from Telegram.</p>
+        <p class="subtext">Connect your MT5 account and manage trades from Telegram.</p>
       </div>
 
-      <div class="card">
-        <div class="section-title">
+      <section class="panel auth-panel">
+        <div class="panel-head">
           <div>
-            <h2>License Access</h2>
+            <h2>Access your account</h2>
             <p>Enter your license key to continue.</p>
           </div>
         </div>
 
-        <label class="field-label">License Key</label>
-        <input id="licenseKey" class="input" placeholder="PZ-ABCD-123456-EF" />
+        <label class="label" for="licenseKey">License key</label>
+        <input id="licenseKey" class="input" placeholder="PZ-ABCD-123456-EF" autocomplete="off" />
 
-        <button id="activateBtn" class="btn primary">Continue</button>
-        <p id="activateMsg" class="message"></p>
+        <button id="activateBtn" class="btn btn-primary">Continue</button>
+        <p id="activateMsg" class="msg"></p>
 
-        <div class="divider"><span>or</span></div>
+        <div class="or-line"><span>Need access?</span></div>
 
-        <button id="showRequestBtn" class="btn ghost">Request License Key</button>
+        <button id="toggleRequestBtn" class="btn btn-outline" type="button">Request License Key</button>
 
-        <div id="requestBox" class="request-box hidden">
-          <label class="field-label">Account Access Type</label>
-          <div class="segmented">
-            <button class="seg-option active" data-request-type="both">Demo + Real</button>
-            <button class="seg-option" data-request-type="demo">Demo</button>
-            <button class="seg-option" data-request-type="real">Real</button>
+        <div id="requestPanel" class="request-panel hidden">
+          <label class="label">Account type</label>
+          <div class="choice-grid">
+            <button class="choice active" data-request-type="both" type="button">Demo + Real</button>
+            <button class="choice" data-request-type="demo" type="button">Demo</button>
+            <button class="choice" data-request-type="real" type="button">Real</button>
           </div>
 
-          <label class="field-label">Note / Message</label>
-          <textarea id="requestNote" class="input textarea" placeholder="Example: Need a demo account license for testing."></textarea>
+          <label class="label" for="requestNote">Message</label>
+          <textarea id="requestNote" class="input textarea" placeholder="Write a short message for admin..."></textarea>
 
-          <button id="requestLicenseBtn" class="btn secondary">Send Request</button>
-          <p id="requestMsg" class="message"></p>
+          <button id="requestLicenseBtn" class="btn btn-secondary" type="button">Send Request</button>
+          <p id="requestMsg" class="msg"></p>
         </div>
-      </div>
+      </section>
     </section>
 
-    <!-- Dashboard -->
+    <!-- DASHBOARD SCREEN -->
     <section id="dashboardScreen" class="screen">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Welcome</p>
+          <p class="kicker">Welcome back</p>
           <h1 id="welcomeName">Trader</h1>
         </div>
 
-        <div class="profile-wrap">
-          <button id="profileBtn" class="profile-btn">
-            <img id="profilePhoto" class="profile-photo hidden" alt="Profile" />
-            <span id="profileInitial" class="profile-initial">P</span>
+        <div class="profile">
+          <button id="profileBtn" class="avatar-btn" type="button">
+            <img id="profilePhoto" class="avatar-img hidden" alt="Profile" />
+            <span id="profileInitial" class="avatar-initial">P</span>
           </button>
 
           <div id="profileMenu" class="profile-menu hidden">
-            <div class="profile-menu-head">
+            <div class="profile-info">
               <strong id="menuName">Trader</strong>
               <span id="menuUsername">@username</span>
             </div>
-            <button id="logoutBtn">Logout</button>
+            <button id="logoutBtn" type="button">Logout</button>
           </div>
         </div>
       </header>
 
-      <div class="status-grid">
-        <div class="stat-card">
-          <span>Worker Status</span>
-          <strong id="onlineBadge" class="status-text offline">Offline</strong>
-        </div>
-        <div class="stat-card">
+      <section class="metrics">
+        <article class="metric metric-wide">
+          <span>Worker status</span>
+          <strong id="workerStatus" class="status-off">Offline</strong>
+        </article>
+        <article class="metric">
           <span>Balance</span>
           <strong id="balance">$0.00</strong>
-        </div>
-        <div class="stat-card">
+        </article>
+        <article class="metric">
           <span>Equity</span>
           <strong id="equity">$0.00</strong>
-        </div>
-        <div class="stat-card">
+        </article>
+        <article class="metric">
           <span>Floating P/L</span>
           <strong id="floating">$0.00</strong>
-        </div>
-      </div>
+        </article>
+        <article class="metric">
+          <span>Open trades</span>
+          <strong id="openTrades">0</strong>
+        </article>
+      </section>
 
-      <div class="stat-card wide">
-        <span>Open Trades</span>
-        <strong id="openTrades">0</strong>
-      </div>
-
-      <!-- MT5 Account Step -->
-      <section id="accountStep" class="card">
-        <div class="section-title">
+      <!-- MT5 ACCOUNT SECTION -->
+      <section id="accountSection" class="panel">
+        <div class="panel-head">
           <div>
             <h2>Connect MT5 Account</h2>
-            <p>Add your MT5 details to unlock trade controls.</p>
+            <p>Add account details to unlock trade controls.</p>
           </div>
-          <span id="accountStatusPill" class="pill pending">Pending</span>
+          <span id="accountPill" class="pill pending">Pending</span>
         </div>
 
-        <div id="mt5AccountStatus" class="account-status">
+        <div id="accountSummary" class="summary-box">
           <span>No MT5 account connected yet.</span>
         </div>
 
-        <div class="form-stack">
+        <div class="form-grid">
           <div>
-            <label class="field-label">MT5 Login ID</label>
+            <label class="label" for="mt5Login">MT5 Login ID</label>
             <input id="mt5Login" class="input" placeholder="12345678" inputmode="numeric" />
           </div>
-
           <div>
-            <label class="field-label">MT5 Main Password</label>
-            <input id="mt5Password" class="input" type="password" placeholder="Enter main trading password" />
+            <label class="label" for="mt5Password">MT5 Main Password</label>
+            <input id="mt5Password" class="input" type="password" placeholder="Main trading password" />
           </div>
-
           <div>
-            <label class="field-label">Broker Server</label>
+            <label class="label" for="mt5Server">Broker Server</label>
             <input id="mt5Server" class="input" placeholder="Example: MetaQuotes-Demo" />
           </div>
         </div>
 
-        <button id="saveMt5Btn" class="btn primary">Continue to Trade Manager</button>
-        <p id="mt5Msg" class="message"></p>
+        <button id="saveMt5Btn" class="btn btn-primary">Continue to Trade Manager</button>
+        <p id="mt5Msg" class="msg"></p>
       </section>
 
-      <!-- Trade Manager -->
-      <section id="tradeManagerStep" class="card hidden">
-        <div class="section-title">
+      <!-- TRADE MANAGER -->
+      <section id="tradeManagerSection" class="panel hidden">
+        <div class="panel-head">
           <div>
             <h2>Trade Manager</h2>
-            <p>Manage your open MT5 trades safely.</p>
+            <p>Fast controls for your active MT5 account.</p>
           </div>
-          <button id="editAccountBtn" class="mini-btn">Edit Account</button>
+          <button id="editAccountBtn" class="small-btn" type="button">Edit Account</button>
         </div>
 
-        <div class="manager-grid">
-          <button class="action-card danger" data-command="close_all" data-confirm="true">
-            <span>Close All</span>
-            <small>Close every managed trade</small>
+        <div class="actions-grid">
+          <button class="action danger" data-command="close_all" data-confirm="true" type="button">
+            <b>Close All</b>
+            <span>Close every managed trade</span>
           </button>
-
-          <button class="action-card success" data-command="close_profit">
-            <span>Close Profit</span>
-            <small>Close profitable trades</small>
+          <button class="action success" data-command="close_profit" type="button">
+            <b>Close Profit</b>
+            <span>Close trades in profit</span>
           </button>
-
-          <button class="action-card danger" data-command="close_loss" data-confirm="true">
-            <span>Close Loss</span>
-            <small>Close losing trades</small>
+          <button class="action danger" data-command="close_loss" data-confirm="true" type="button">
+            <b>Close Loss</b>
+            <span>Close trades in loss</span>
           </button>
-
-          <button class="action-card warning" data-command="close_half" data-confirm="true">
-            <span>Close Half</span>
-            <small>Partial close all trades</small>
+          <button class="action warning" data-command="close_half" data-confirm="true" type="button">
+            <b>Close Half</b>
+            <span>Partial close all trades</span>
           </button>
-
-          <button class="action-card" data-command="breakeven">
-            <span>Breakeven</span>
-            <small>Move SL to entry</small>
+          <button class="action" data-command="breakeven" type="button">
+            <b>Breakeven</b>
+            <span>Move SL to entry</span>
           </button>
-
-          <button class="action-card" data-command="refresh_status">
-            <span>Refresh</span>
-            <small>Update account status</small>
+          <button class="action" data-command="refresh_status" type="button">
+            <b>Refresh</b>
+            <span>Update dashboard</span>
           </button>
         </div>
 
-        <div class="tool-card">
+        <div class="tool">
           <div>
-            <h3>Close Low Profit Trades</h3>
-            <p>Close profitable trades below or equal to your amount.</p>
+            <h3>Close Low Profit</h3>
+            <p>Close profitable trades below or equal to amount.</p>
           </div>
-          <div class="inline-form">
+          <div class="tool-form">
             <input id="lessProfitAmount" class="input" type="number" step="0.01" value="2" />
-            <button id="closeLessProfit" class="btn secondary">Close</button>
+            <button id="closeLessProfit" class="btn btn-secondary" type="button">Close</button>
           </div>
         </div>
 
-        <div class="tool-card">
+        <div class="tool">
           <div>
             <h3>Set SL / TP</h3>
-            <p>Apply SL and TP in points to all managed trades.</p>
+            <p>Apply stop loss and take profit in points.</p>
           </div>
-          <div class="inline-form two">
+          <div class="tool-form three">
             <input id="slPoints" class="input" type="number" value="500" placeholder="SL points" />
             <input id="tpPoints" class="input" type="number" value="1000" placeholder="TP points" />
-            <button id="setSltp" class="btn secondary">Apply</button>
+            <button id="setSltp" class="btn btn-secondary" type="button">Apply</button>
           </div>
         </div>
 
-        <p id="actionMsg" class="message"></p>
+        <p id="actionMsg" class="msg"></p>
       </section>
     </section>
-  </div>
+  </main>
 
   <div id="confirmModal" class="modal hidden">
     <div class="modal-card">
-      <h3>Confirm Action</h3>
+      <h3>Confirm action</h3>
       <p id="confirmText">Are you sure?</p>
       <div class="modal-actions">
-        <button id="cancelConfirm" class="btn ghost">Cancel</button>
-        <button id="yesConfirm" class="btn danger-btn">Yes, continue</button>
+        <button id="cancelConfirm" class="btn btn-outline" type="button">Cancel</button>
+        <button id="yesConfirm" class="btn btn-danger" type="button">Yes, continue</button>
       </div>
     </div>
   </div>
