@@ -258,8 +258,8 @@ async function handleRequestLicense(req, res, supabase) {
 
   const displayName = `${firstName || ''} ${lastName || ''}`.trim() || 'Unknown';
 
-  // You can set AUTO_LICENSE_DAYS in Vercel. Default is 7 days.
-  const autoDays = Number(process.env.AUTO_LICENSE_DAYS || 7);
+  // You can set AUTO_LICENSE_DAYS in Vercel. Default is 30 days.
+  const autoDays = Number(process.env.AUTO_LICENSE_DAYS || 30);
   const validUntil = new Date(Date.now() + autoDays * 24 * 60 * 60 * 1000).toISOString();
 
   // Generate license key using the existing generateLicenseKey() function in your api/[route].js
