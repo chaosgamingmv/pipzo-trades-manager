@@ -32,7 +32,10 @@ function requireEaSecret(req, res) {
   const expected = process.env.EA_API_SECRET || '';
 
   if (!expected || sent !== expected) {
-    json(res, 401, { ok: false, message: 'Invalid EA secret' });
+    json(res, 401, {
+      ok: false,
+      message: 'Invalid EA secret'
+    });
     return false;
   }
 
@@ -48,14 +51,20 @@ function generateLicenseKey() {
 
 function validateTelegramInitData(initData) {
   if (!initData) {
-    return { ok: false, message: 'Missing Telegram initData. Open inside Telegram.' };
+    return {
+      ok: false,
+      message: 'Missing Telegram initData. Open inside Telegram.'
+    };
   }
 
   const params = new URLSearchParams(initData);
   const hash = params.get('hash');
 
   if (!hash) {
-    return { ok: false, message: 'Missing Telegram hash.' };
+    return {
+      ok: false,
+      message: 'Missing Telegram hash.'
+    };
   }
 
   params.delete('hash');
@@ -66,14 +75,20 @@ function validateTelegramInitData(initData) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN || '';
 
   if (!botToken) {
-    return { ok: false, message: 'Missing TELEGRAM_BOT_TOKEN on server.' };
+    return {
+      ok: false,
+      message: 'Missing TELEGRAM_BOT_TOKEN on server.'
+    };
   }
 
   const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
   const calculatedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
 
   if (calculatedHash !== hash) {
-    return { ok: false, message: 'Invalid Telegram initData.' };
+    return {
+      ok: false,
+      message: 'Invalid Telegram initData.'
+    };
   }
 
   let user = {};
@@ -87,7 +102,10 @@ function validateTelegramInitData(initData) {
     }
   }
 
-  return { ok: true, user };
+  return {
+    ok: true,
+    user
+  };
 }
 
 function getRoute(req) {
@@ -100,12 +118,46 @@ function getRoute(req) {
   return route || '';
 }
 
+async function sendTelegramMessage(chatId, text) {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+
+  if (!botToken) {
+    throw new Error('Missing TELEGRAM_BOT_TOKEN.');
+  }
+
+  const telegramRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text
+    })
+  });
+
+  const telegramData = await telegramRes.json();
+
+  if (!telegramData.ok) {
+    throw new Error(telegramData.description || 'Could not send Telegram message.');
+  }
+
+  return telegramData;
+}
+
 async function handleActivate(req, res, supabase) {
-  const { initData = '', license_key = '' } = req.body || {};
+  const {
+    initData = '',
+    license_key = ''
+  } = req.body || {};
+
   const licenseKey = String(license_key).trim();
 
   if (!licenseKey) {
-    return json(res, 400, { ok: false, message: 'License key is required' });
+    return json(res, 400, {
+      ok: false,
+      message: 'License key is required'
+    });
   }
 
   const tg = validateTelegramInitData(initData);
@@ -120,7 +172,10 @@ async function handleActivate(req, res, supabase) {
   const lastName = String(tg.user?.last_name || '');
 
   if (!telegramId) {
-    return json(res, 400, { ok: false, message: 'Telegram user not found' });
+    return json(res, 400, {
+      ok: false,
+      message: 'Telegram user not found'
+    });
   }
 
   const { data: license, error: licenseError } = await supabase
@@ -132,11 +187,17 @@ async function handleActivate(req, res, supabase) {
   if (licenseError) throw licenseError;
 
   if (!license) {
-    return json(res, 404, { ok: false, message: 'License key not found' });
+    return json(res, 404, {
+      ok: false,
+      message: 'License key not found'
+    });
   }
 
   if (!license.is_active || new Date(license.valid_until).getTime() < Date.now()) {
-    return json(res, 403, { ok: false, message: 'License key is expired or inactive' });
+    return json(res, 403, {
+      ok: false,
+      message: 'License key is expired or inactive'
+    });
   }
 
   if (license.telegram_id && license.telegram_id !== telegramId) {
@@ -168,7 +229,9 @@ async function handleActivate(req, res, supabase) {
       license_key: licenseKey,
       is_active: true,
       last_login: new Date().toISOString()
-    }, { onConflict: 'telegram_id' });
+    }, {
+      onConflict: 'telegram_id'
+    });
 
   if (userError) throw userError;
 
@@ -188,7 +251,10 @@ async function handleActivate(req, res, supabase) {
 }
 
 async function handleMe(req, res, supabase) {
-  const { initData = '' } = req.body || {};
+  const {
+    initData = ''
+  } = req.body || {};
+
   const tg = validateTelegramInitData(initData);
 
   if (!tg.ok) {
@@ -212,7 +278,11 @@ async function handleMe(req, res, supabase) {
 }
 
 async function handleRequestLicense(req, res, supabase) {
-  const { initData = '', request_type = 'both', note = '' } = req.body || {};
+  const {
+    initData = '',
+    request_type = 'both',
+    note = ''
+  } = req.body || {};
 
   if (!['demo', 'real', 'both'].includes(request_type)) {
     return json(res, 400, {
@@ -232,20 +302,17 @@ async function handleRequestLicense(req, res, supabase) {
   const firstName = String(tg.user?.first_name || '');
   const lastName = String(tg.user?.last_name || '');
 
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const adminChatId = process.env.ADMIN_TELEGRAM_ID;
-
-  if (!botToken) {
-    return json(res, 500, {
-      ok: false,
-      message: 'Telegram bot token is not configured.'
-    });
-  }
-
   if (!telegramId) {
     return json(res, 400, {
       ok: false,
       message: 'Telegram user not found.'
+    });
+  }
+
+  if (!process.env.TELEGRAM_BOT_TOKEN) {
+    return json(res, 500, {
+      ok: false,
+      message: 'Telegram bot token is not configured.'
     });
   }
 
@@ -258,11 +325,9 @@ async function handleRequestLicense(req, res, supabase) {
 
   const displayName = `${firstName || ''} ${lastName || ''}`.trim() || 'Unknown';
 
-  // You can set AUTO_LICENSE_DAYS in Vercel. Default is 30 days.
   const autoDays = Number(process.env.AUTO_LICENSE_DAYS || 30);
   const validUntil = new Date(Date.now() + autoDays * 24 * 60 * 60 * 1000).toISOString();
 
-  // Generate license key using the existing generateLicenseKey() function in your api/[route].js
   const key = generateLicenseKey();
 
   const { data: license, error: licenseError } = await supabase
@@ -279,9 +344,7 @@ async function handleRequestLicense(req, res, supabase) {
     .select()
     .single();
 
-  if (licenseError) {
-    throw licenseError;
-  }
+  if (licenseError) throw licenseError;
 
   const userMessage =
 `✅ Pipzo License Approved
@@ -295,25 +358,21 @@ Valid Until: ${new Date(validUntil).toLocaleDateString('en-GB')}
 
 Open the Pipzo Mini App and paste this key to continue.`;
 
-  const userTelegramRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      chat_id: telegramId,
-      text: userMessage
-    })
-  });
-
-  const userTelegramData = await userTelegramRes.json();
-
-  if (!userTelegramData.ok) {
+  try {
+    await sendTelegramMessage(telegramId, userMessage);
+  } catch (error) {
     return json(res, 500, {
       ok: false,
-      message: userTelegramData.description || 'License created, but could not send message to user.'
+      message: `License created, but could not send message to user: ${error.message}`,
+      license: {
+        license_key: key,
+        allowed_account_type: request_type,
+        valid_until: validUntil
+      }
     });
   }
+
+  const adminChatId = process.env.ADMIN_TELEGRAM_ID;
 
   if (adminChatId) {
     const adminMessage =
@@ -332,29 +391,23 @@ ${key}
 📝 Note:
 ${note || 'No note'}`;
 
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        chat_id: adminChatId,
-        text: adminMessage
-      })
-    });
+    try {
+      await sendTelegramMessage(adminChatId, adminMessage);
+    } catch {
+      // Do not fail the user if only the admin notification fails.
+    }
   }
 
   return json(res, 200, {
     ok: true,
     message: 'License key generated and sent to your Telegram.',
     license: {
-      license_key: key,
-      allowed_account_type: request_type,
-      valid_until: validUntil
+      license_key: license.license_key,
+      allowed_account_type: license.allowed_account_type,
+      valid_until: license.valid_until
     }
   });
 }
-
 
 async function handleCreateCommand(req, res, supabase) {
   const allowedCommands = [
@@ -370,10 +423,17 @@ async function handleCreateCommand(req, res, supabase) {
     'refresh_status'
   ];
 
-  const { initData = '', command = '', params = {} } = req.body || {};
+  const {
+    initData = '',
+    command = '',
+    params = {}
+  } = req.body || {};
 
   if (!allowedCommands.includes(command)) {
-    return json(res, 400, { ok: false, message: 'Invalid command' });
+    return json(res, 400, {
+      ok: false,
+      message: 'Invalid command'
+    });
   }
 
   const tg = validateTelegramInitData(initData);
@@ -393,7 +453,10 @@ async function handleCreateCommand(req, res, supabase) {
   if (userError) throw userError;
 
   if (!appUser?.license_key) {
-    return json(res, 403, { ok: false, message: 'Activate your license first' });
+    return json(res, 403, {
+      ok: false,
+      message: 'Activate your license first'
+    });
   }
 
   const { data: license, error: licenseError } = await supabase
@@ -405,7 +468,10 @@ async function handleCreateCommand(req, res, supabase) {
   if (licenseError) throw licenseError;
 
   if (!license || !license.is_active || new Date(license.valid_until).getTime() < Date.now()) {
-    return json(res, 403, { ok: false, message: 'License expired or inactive' });
+    return json(res, 403, {
+      ok: false,
+      message: 'License expired or inactive'
+    });
   }
 
   const { data: inserted, error: insertError } = await supabase
@@ -431,7 +497,10 @@ async function handleCreateCommand(req, res, supabase) {
 }
 
 async function handleListCommands(req, res, supabase) {
-  const { initData = '' } = req.body || {};
+  const {
+    initData = ''
+  } = req.body || {};
+
   const tg = validateTelegramInitData(initData);
 
   if (!tg.ok) {
@@ -449,14 +518,19 @@ async function handleListCommands(req, res, supabase) {
   if (userError) throw userError;
 
   if (!appUser?.license_key) {
-    return json(res, 200, { ok: true, commands: [] });
+    return json(res, 200, {
+      ok: true,
+      commands: []
+    });
   }
 
   const { data, error } = await supabase
     .from('ea_commands')
     .select('*')
     .eq('license_key', appUser.license_key)
-    .order('created_at', { ascending: false })
+    .order('created_at', {
+      ascending: false
+    })
     .limit(20);
 
   if (error) throw error;
@@ -468,7 +542,10 @@ async function handleListCommands(req, res, supabase) {
 }
 
 async function handleStatus(req, res, supabase) {
-  const { initData = '' } = req.body || {};
+  const {
+    initData = ''
+  } = req.body || {};
+
   const tg = validateTelegramInitData(initData);
 
   if (!tg.ok) {
@@ -486,7 +563,10 @@ async function handleStatus(req, res, supabase) {
   if (userError) throw userError;
 
   if (!appUser?.license_key) {
-    return json(res, 200, { ok: true, status: null });
+    return json(res, 200, {
+      ok: true,
+      status: null
+    });
   }
 
   const { data, error } = await supabase
@@ -512,15 +592,24 @@ async function handleAdminGenerateKey(req, res, supabase) {
   } = req.body || {};
 
   if (!process.env.ADMIN_PASSWORD || admin_password !== process.env.ADMIN_PASSWORD) {
-    return json(res, 401, { ok: false, message: 'Invalid admin password' });
+    return json(res, 401, {
+      ok: false,
+      message: 'Invalid admin password'
+    });
   }
 
   if (!valid_until) {
-    return json(res, 400, { ok: false, message: 'Validity date is required' });
+    return json(res, 400, {
+      ok: false,
+      message: 'Validity date is required'
+    });
   }
 
   if (!['demo', 'real', 'both'].includes(allowed_account_type)) {
-    return json(res, 400, { ok: false, message: 'Invalid account type' });
+    return json(res, 400, {
+      ok: false,
+      message: 'Invalid account type'
+    });
   }
 
   const key = generateLicenseKey();
@@ -547,16 +636,23 @@ async function handleAdminGenerateKey(req, res, supabase) {
 }
 
 async function handleAdminListKeys(req, res, supabase) {
-  const { admin_password = '' } = req.body || {};
+  const {
+    admin_password = ''
+  } = req.body || {};
 
   if (!process.env.ADMIN_PASSWORD || admin_password !== process.env.ADMIN_PASSWORD) {
-    return json(res, 401, { ok: false, message: 'Invalid admin password' });
+    return json(res, 401, {
+      ok: false,
+      message: 'Invalid admin password'
+    });
   }
 
   const { data, error } = await supabase
     .from('license_keys')
     .select('*')
-    .order('created_at', { ascending: false })
+    .order('created_at', {
+      ascending: false
+    })
     .limit(100);
 
   if (error) throw error;
@@ -570,12 +666,19 @@ async function handleAdminListKeys(req, res, supabase) {
 async function handleEaPoll(req, res, supabase) {
   if (!requireEaSecret(req, res)) return;
 
-  const { license_key = '', mt5_account = '' } = req.body || {};
+  const {
+    license_key = '',
+    mt5_account = ''
+  } = req.body || {};
+
   const licenseKey = String(license_key).trim();
   const mt5Account = String(mt5_account).trim();
 
   if (!licenseKey) {
-    return json(res, 400, { ok: false, message: 'license_key required' });
+    return json(res, 400, {
+      ok: false,
+      message: 'license_key required'
+    });
   }
 
   const { data: license, error: licenseError } = await supabase
@@ -587,13 +690,18 @@ async function handleEaPoll(req, res, supabase) {
   if (licenseError) throw licenseError;
 
   if (!license || !license.is_active || new Date(license.valid_until).getTime() < Date.now()) {
-    return json(res, 403, { ok: false, message: 'License inactive or expired' });
+    return json(res, 403, {
+      ok: false,
+      message: 'License inactive or expired'
+    });
   }
 
   if (mt5Account && !license.mt5_account) {
     const { error: lockError } = await supabase
       .from('license_keys')
-      .update({ mt5_account: mt5Account })
+      .update({
+        mt5_account: mt5Account
+      })
       .eq('license_key', licenseKey);
 
     if (lockError) throw lockError;
@@ -609,14 +717,19 @@ async function handleEaPoll(req, res, supabase) {
     .select('*')
     .eq('license_key', licenseKey)
     .eq('status', 'pending')
-    .order('created_at', { ascending: true })
+    .order('created_at', {
+      ascending: true
+    })
     .limit(1)
     .maybeSingle();
 
   if (cmdError) throw cmdError;
 
   if (!command) {
-    return json(res, 200, { ok: true, command: null });
+    return json(res, 200, {
+      ok: true,
+      command: null
+    });
   }
 
   const { data: updated, error: updateError } = await supabase
@@ -640,10 +753,17 @@ async function handleEaPoll(req, res, supabase) {
 async function handleEaUpdateCommand(req, res, supabase) {
   if (!requireEaSecret(req, res)) return;
 
-  const { id = '', status = '', result = '' } = req.body || {};
+  const {
+    id = '',
+    status = '',
+    result = ''
+  } = req.body || {};
 
   if (!id || !['executed', 'failed'].includes(status)) {
-    return json(res, 400, { ok: false, message: 'Invalid request' });
+    return json(res, 400, {
+      ok: false,
+      message: 'Invalid request'
+    });
   }
 
   const { data, error } = await supabase
@@ -672,7 +792,10 @@ async function handleEaUpdateStatus(req, res, supabase) {
   const licenseKey = String(body.license_key || '').trim();
 
   if (!licenseKey) {
-    return json(res, 400, { ok: false, message: 'license_key required' });
+    return json(res, 400, {
+      ok: false,
+      message: 'license_key required'
+    });
   }
 
   const payload = {
@@ -695,7 +818,9 @@ async function handleEaUpdateStatus(req, res, supabase) {
 
   const { data, error } = await supabase
     .from('ea_status')
-    .upsert(payload, { onConflict: 'license_key' })
+    .upsert(payload, {
+      onConflict: 'license_key'
+    })
     .select()
     .single();
 
@@ -725,7 +850,10 @@ async function handleSaveMt5Account(req, res, supabase) {
   const username = String(tg.user?.username || '');
 
   if (!telegramId) {
-    return json(res, 400, { ok: false, message: 'Telegram user not found' });
+    return json(res, 400, {
+      ok: false,
+      message: 'Telegram user not found'
+    });
   }
 
   if (!mt5_login || !mt5_password || !mt5_server) {
@@ -744,7 +872,10 @@ async function handleSaveMt5Account(req, res, supabase) {
   if (userError) throw userError;
 
   if (!appUser?.license_key) {
-    return json(res, 403, { ok: false, message: 'Activate your license first' });
+    return json(res, 403, {
+      ok: false,
+      message: 'Activate your license first'
+    });
   }
 
   const { data: license, error: licenseError } = await supabase
@@ -756,7 +887,10 @@ async function handleSaveMt5Account(req, res, supabase) {
   if (licenseError) throw licenseError;
 
   if (!license || !license.is_active || new Date(license.valid_until).getTime() < Date.now()) {
-    return json(res, 403, { ok: false, message: 'License expired or inactive' });
+    return json(res, 403, {
+      ok: false,
+      message: 'License expired or inactive'
+    });
   }
 
   const payload = {
@@ -774,7 +908,9 @@ async function handleSaveMt5Account(req, res, supabase) {
 
   const { data, error } = await supabase
     .from('mt5_accounts')
-    .upsert(payload, { onConflict: 'license_key' })
+    .upsert(payload, {
+      onConflict: 'license_key'
+    })
     .select('id, license_key, telegram_username, mt5_login, mt5_server, connection_status, created_at, updated_at')
     .single();
 
@@ -788,7 +924,10 @@ async function handleSaveMt5Account(req, res, supabase) {
 }
 
 async function handleGetMt5Account(req, res, supabase) {
-  const { initData = '' } = req.body || {};
+  const {
+    initData = ''
+  } = req.body || {};
+
   const tg = validateTelegramInitData(initData);
 
   if (!tg.ok) {
@@ -806,7 +945,10 @@ async function handleGetMt5Account(req, res, supabase) {
   if (userError) throw userError;
 
   if (!appUser?.license_key) {
-    return json(res, 200, { ok: true, account: null });
+    return json(res, 200, {
+      ok: true,
+      account: null
+    });
   }
 
   const { data, error } = await supabase
@@ -826,11 +968,17 @@ async function handleGetMt5Account(req, res, supabase) {
 async function handleWorkerGetAccount(req, res, supabase) {
   if (!requireEaSecret(req, res)) return;
 
-  const { license_key = '' } = req.body || {};
+  const {
+    license_key = ''
+  } = req.body || {};
+
   const licenseKey = String(license_key).trim();
 
   if (!licenseKey) {
-    return json(res, 400, { ok: false, message: 'license_key required' });
+    return json(res, 400, {
+      ok: false,
+      message: 'license_key required'
+    });
   }
 
   const { data: license, error: licenseError } = await supabase
@@ -842,7 +990,10 @@ async function handleWorkerGetAccount(req, res, supabase) {
   if (licenseError) throw licenseError;
 
   if (!license || !license.is_active || new Date(license.valid_until).getTime() < Date.now()) {
-    return json(res, 403, { ok: false, message: 'License inactive or expired' });
+    return json(res, 403, {
+      ok: false,
+      message: 'License inactive or expired'
+    });
   }
 
   const { data: account, error: accountError } = await supabase
@@ -873,6 +1024,56 @@ async function handleWorkerGetAccount(req, res, supabase) {
   });
 }
 
+async function handleWorkerGetNextAccount(req, res, supabase) {
+  if (!requireEaSecret(req, res)) return;
+
+  const { data: account, error: accountError } = await supabase
+    .from('mt5_accounts')
+    .select('*')
+    .eq('is_active', true)
+    .in('connection_status', ['pending', 'failed', 'connected'])
+    .order('updated_at', {
+      ascending: true
+    })
+    .limit(1)
+    .maybeSingle();
+
+  if (accountError) throw accountError;
+
+  if (!account) {
+    return json(res, 404, {
+      ok: false,
+      message: 'No active MT5 account found'
+    });
+  }
+
+  const { data: license, error: licenseError } = await supabase
+    .from('license_keys')
+    .select('*')
+    .eq('license_key', account.license_key)
+    .maybeSingle();
+
+  if (licenseError) throw licenseError;
+
+  if (!license || !license.is_active || new Date(license.valid_until).getTime() < Date.now()) {
+    return json(res, 403, {
+      ok: false,
+      message: 'License inactive or expired for selected account'
+    });
+  }
+
+  return json(res, 200, {
+    ok: true,
+    account: {
+      license_key: account.license_key,
+      mt5_login: account.mt5_login,
+      mt5_password: account.mt5_password,
+      mt5_server: account.mt5_server,
+      telegram_username: account.telegram_username
+    }
+  });
+}
+
 async function handleWorkerUpdateAccountStatus(req, res, supabase) {
   if (!requireEaSecret(req, res)) return;
 
@@ -887,7 +1088,10 @@ async function handleWorkerUpdateAccountStatus(req, res, supabase) {
   const licenseKey = String(license_key).trim();
 
   if (!licenseKey) {
-    return json(res, 400, { ok: false, message: 'license_key required' });
+    return json(res, 400, {
+      ok: false,
+      message: 'license_key required'
+    });
   }
 
   const { data, error } = await supabase
@@ -919,7 +1123,10 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== 'POST') {
-    return json(res, 405, { ok: false, message: 'Method not allowed' });
+    return json(res, 405, {
+      ok: false,
+      message: 'Method not allowed'
+    });
   }
 
   const route = getRoute(req);
@@ -945,6 +1152,7 @@ export default async function handler(req, res) {
     if (route === 'save_mt5_account') return await handleSaveMt5Account(req, res, supabase);
     if (route === 'get_mt5_account') return await handleGetMt5Account(req, res, supabase);
     if (route === 'worker_get_account') return await handleWorkerGetAccount(req, res, supabase);
+    if (route === 'worker_get_next_account') return await handleWorkerGetNextAccount(req, res, supabase);
     if (route === 'worker_update_account_status') return await handleWorkerUpdateAccountStatus(req, res, supabase);
 
     return json(res, 404, {
