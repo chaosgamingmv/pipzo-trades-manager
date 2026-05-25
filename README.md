@@ -1,115 +1,35 @@
-# Pipzo Trade Manager - Vercel Node.js Version
+# Pipzo Cloud Mode Update
 
-This version uses only:
+This update adds MT5 Account Connection inside the Telegram Mini App.
 
-- Vercel frontend
-- Vercel Node.js API routes
-- Supabase PostgreSQL
-- MQL5 EA
+## What this adds
 
-No PHP hosting needed.
+- New Supabase table: `mt5_accounts`
+- New Mini App section: Connect MT5 Account
+- New Vercel API routes:
+  - `/api/save_mt5_account`
+  - `/api/get_mt5_account`
+  - `/api/worker_get_account`
+- Updated VM worker:
+  - Can fetch MT5 account details from Vercel/Supabase
+  - Can login to MT5 using saved login/password/server
+  - Can still use `.env` fallback for testing
 
-## 1. Run Supabase SQL
+## Important Security Note
 
-Open Supabase SQL Editor and run:
+This starter stores MT5 passwords in Supabase. For testing, this is okay.
+Before using with real users, add encryption for passwords.
 
-```text
-sql/schema.sql
-```
+Recommended production upgrade:
+- Encrypt MT5 password before storing
+- Store encryption key only in Vercel environment variables
+- Never show password in admin or logs
+- Add delete account access button
 
-## 2. Add Vercel Environment Variables
+## Install
 
-In Vercel:
-
-```text
-Project → Settings → Environment Variables
-```
-
-Add:
-
-```text
-SUPABASE_URL
-SUPABASE_SERVICE_ROLE_KEY
-TELEGRAM_BOT_TOKEN
-EA_API_SECRET
-ADMIN_PASSWORD
-```
-
-Example:
-
-```text
-EA_API_SECRET = pipzo-secret-2026-long-random
-ADMIN_PASSWORD = your-admin-password
-```
-
-## 3. Deploy to Vercel
-
-Push this project to GitHub. Vercel will install dependencies and deploy.
-
-## 4. URLs
-
-Mini App:
-
-```text
-https://pipzo-trades-manager.vercel.app/
-```
-
-Admin:
-
-```text
-https://pipzo-trades-manager.vercel.app/admin
-```
-
-API Base:
-
-```text
-https://pipzo-trades-manager.vercel.app/api
-```
-
-## 5. Telegram BotFather
-
-Set Telegram Mini App URL to:
-
-```text
-https://pipzo-trades-manager.vercel.app/
-```
-
-## 6. MT5 EA
-
-Copy:
-
-```text
-mt5/PipzoVercelTradeManager.mq5
-```
-
-to:
-
-```text
-MQL5/Experts/
-```
-
-Compile in MetaEditor.
-
-EA inputs:
-
-```text
-ApiBaseUrl = https://pipzo-trades-manager.vercel.app/api
-LicenseKey = generated license key
-EaApiSecret = same as EA_API_SECRET in Vercel
-```
-
-MT5 WebRequest allowed URL:
-
-```text
-https://pipzo-trades-manager.vercel.app
-```
-
-## 7. Test flow
-
-1. Open admin page.
-2. Enter admin password.
-3. Generate license key.
-4. Open Mini App in Telegram.
-5. Activate with license key.
-6. Attach EA in MT5 with same key.
-7. Press Refresh Status in Mini App.
+1. Run `sql/cloud_mode_update.sql` in Supabase SQL Editor.
+2. Add the new API files from `/api` into your Vercel project `/api`.
+3. Replace your Mini App `index.html` and `assets/js/app.js` with the updated ones or manually patch the section.
+4. Replace your worker with `worker/pipzo_cloud_worker.py`.
+5. Push to GitHub and redeploy Vercel.

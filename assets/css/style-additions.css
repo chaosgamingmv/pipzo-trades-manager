@@ -1,0 +1,24 @@
+/* Add these styles to assets/css/style.css */
+
+.form-row.single {
+  grid-template-columns: 1fr;
+}
+
+.account-status {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 12px;
+  background: #0f172a;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  color: #cbd5e1;
+}
+
+.account-status b {
+  color: #93c5fd;
+}
+
+.error-text {
+  color: #fca5a5;
+}

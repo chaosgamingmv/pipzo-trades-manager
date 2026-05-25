@@ -14,7 +14,7 @@
         <p class="eyebrow">Pipzo Mini App</p>
         <h1>MT5 Trade Manager</h1>
       </div>
-      <div id="onlineBadge" class="badge offline">EA Offline</div>
+      <div id="onlineBadge" class="badge offline">Worker Offline</div>
     </header>
 
     <section id="activateSection" class="card">
@@ -32,6 +32,26 @@
         <div class="stat"><span>Floating P/L</span><strong id="floating">$0.00</strong></div>
         <div class="stat"><span>Open Trades</span><strong id="openTrades">0</strong></div>
       </div>
+
+      <section class="card">
+        <h2>Connect MT5 Account</h2>
+        <p class="muted">Use your MT5 main password. Investor password is read-only and cannot manage trades.</p>
+        <div id="mt5AccountStatus" class="account-status">
+          <span>No MT5 account connected yet.</span>
+        </div>
+
+        <div class="form-row single">
+          <input id="mt5Login" placeholder="MT5 Login ID">
+        </div>
+        <div class="form-row single">
+          <input id="mt5Password" type="password" placeholder="MT5 Main Password">
+        </div>
+        <div class="form-row single">
+          <input id="mt5Server" placeholder="Broker Server e.g. MetaQuotes-Demo">
+        </div>
+        <button id="saveMt5Btn">Save MT5 Account</button>
+        <p id="mt5Msg" class="message"></p>
+      </section>
 
       <section class="card">
         <h2>Trade Controls</h2>

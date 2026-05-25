@@ -50,6 +50,7 @@ async function checkMe() {
   if (res.ok && res.user && res.user.license_key) {
     activateSection.classList.add('hidden');
     dashboardSection.classList.remove('hidden');
+    await loadMt5Account();
     await loadStatus();
     await loadCommands();
   }
@@ -76,6 +77,7 @@ activateBtn.addEventListener('click', async () => {
     activateMsg.textContent = 'Activated.';
     activateSection.classList.add('hidden');
     dashboardSection.classList.remove('hidden');
+    await loadMt5Account();
     await loadStatus();
     await loadCommands();
   } else {
@@ -112,16 +114,71 @@ document.querySelectorAll('[data-command]').forEach(btn => {
   });
 });
 
-document.getElementById('closeLessProfit').addEventListener('click', () => {
+document.getElementById('closeLessProfit')?.addEventListener('click', () => {
   const maxProfit = Number(document.getElementById('lessProfitAmount').value || 0);
   sendCommand('close_less_profit', { max_profit: maxProfit });
 });
 
-document.getElementById('setSltp').addEventListener('click', () => {
+document.getElementById('setSltp')?.addEventListener('click', () => {
   const slPoints = Number(document.getElementById('slPoints').value || 0);
   const tpPoints = Number(document.getElementById('tpPoints').value || 0);
   sendCommand('set_sltp', { sl_points: slPoints, tp_points: tpPoints });
 });
+
+document.getElementById('saveMt5Btn')?.addEventListener('click', async () => {
+  const login = document.getElementById('mt5Login').value.trim();
+  const password = document.getElementById('mt5Password').value;
+  const server = document.getElementById('mt5Server').value.trim();
+  const msg = document.getElementById('mt5Msg');
+
+  if (!login || !password || !server) {
+    msg.textContent = 'MT5 login, password, and server are required.';
+    return;
+  }
+
+  const btn = document.getElementById('saveMt5Btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  msg.textContent = 'Saving MT5 account...';
+
+  const res = await api('save_mt5_account', {
+    mt5_login: login,
+    mt5_password: password,
+    mt5_server: server
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'Save MT5 Account';
+
+  if (res.ok) {
+    msg.textContent = 'MT5 account saved. Worker will connect shortly.';
+    document.getElementById('mt5Password').value = '';
+    await loadMt5Account();
+  } else {
+    msg.textContent = res.message || 'Could not save MT5 account.';
+  }
+});
+
+async function loadMt5Account() {
+  const card = document.getElementById('mt5AccountStatus');
+  if (!card) return;
+
+  const res = await api('get_mt5_account');
+
+  if (!res.ok || !res.account) {
+    card.innerHTML = '<span>No MT5 account connected yet.</span>';
+    return;
+  }
+
+  const a = res.account;
+  card.innerHTML = `
+    <b>Connected MT5 Account</b>
+    <span>Login: ${a.mt5_login}</span>
+    <span>Server: ${a.mt5_server}</span>
+    <span>Status: ${a.connection_status || 'pending'}</span>
+    ${a.last_error ? `<span class="error-text">Error: ${a.last_error}</span>` : ''}
+  `;
+}
 
 function openConfirm(command) {
   pendingCommand = command;
@@ -129,12 +186,12 @@ function openConfirm(command) {
   document.getElementById('confirmModal').classList.remove('hidden');
 }
 
-document.getElementById('cancelConfirm').addEventListener('click', () => {
+document.getElementById('cancelConfirm')?.addEventListener('click', () => {
   pendingCommand = null;
   document.getElementById('confirmModal').classList.add('hidden');
 });
 
-document.getElementById('yesConfirm').addEventListener('click', async () => {
+document.getElementById('yesConfirm')?.addEventListener('click', async () => {
   if (pendingCommand) {
     await sendCommand(pendingCommand);
   }
@@ -149,7 +206,7 @@ async function loadStatus() {
 
   if (!s) {
     onlineBadge.className = 'badge offline';
-    onlineBadge.textContent = 'EA Offline';
+    onlineBadge.textContent = 'Worker Offline';
     return;
   }
 
@@ -157,7 +214,7 @@ async function loadStatus() {
   const online = Date.now() - lastSeen < 30000;
 
   onlineBadge.className = 'badge ' + (online ? 'online' : 'offline');
-  onlineBadge.textContent = online ? 'EA Online' : 'EA Offline';
+  onlineBadge.textContent = online ? 'Worker Online' : 'Worker Offline';
 
   document.getElementById('balance').textContent = money(s.balance);
   document.getElementById('equity').textContent = money(s.equity);
@@ -183,5 +240,6 @@ async function loadCommands() {
 }
 
 checkMe();
+setInterval(loadMt5Account, 7000);
 setInterval(loadStatus, 5000);
 setInterval(loadCommands, 7000);
