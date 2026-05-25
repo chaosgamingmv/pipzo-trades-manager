@@ -235,10 +235,17 @@ async function handleRequestLicense(req, res, supabase) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const adminChatId = process.env.ADMIN_TELEGRAM_ID;
 
-  if (!botToken || !adminChatId) {
+  if (!botToken) {
     return json(res, 500, {
       ok: false,
-      message: 'Telegram admin notification is not configured.'
+      message: 'Telegram bot token is not configured.'
+    });
+  }
+
+  if (!telegramId) {
+    return json(res, 400, {
+      ok: false,
+      message: 'Telegram user not found.'
     });
   }
 
@@ -251,45 +258,103 @@ async function handleRequestLicense(req, res, supabase) {
 
   const displayName = `${firstName || ''} ${lastName || ''}`.trim() || 'Unknown';
 
-  const message =
-`🔐 New Pipzo License Request
+  // You can set AUTO_LICENSE_DAYS in Vercel. Default is 7 days.
+  const autoDays = Number(process.env.AUTO_LICENSE_DAYS || 7);
+  const validUntil = new Date(Date.now() + autoDays * 24 * 60 * 60 * 1000).toISOString();
 
-👤 Name: ${displayName}
-📱 Username: ${username ? '@' + username : 'No username'}
-🆔 Telegram ID: ${telegramId}
+  // Generate license key using the existing generateLicenseKey() function in your api/[route].js
+  const key = generateLicenseKey();
 
-📌 Requested Access: ${typeLabel}
+  const { data: license, error: licenseError } = await supabase
+    .from('license_keys')
+    .insert({
+      license_key: key,
+      label: `${displayName} - Auto Request`,
+      telegram_id: telegramId,
+      telegram_username: username,
+      allowed_account_type: request_type,
+      valid_until: validUntil,
+      is_active: true
+    })
+    .select()
+    .single();
 
-📝 Note:
-${note || 'No note'}
+  if (licenseError) {
+    throw licenseError;
+  }
 
-Open your admin panel to generate a license key.`;
+  const userMessage =
+`✅ Pipzo License Approved
 
-  const telegramRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+Your license key is:
+
+${key}
+
+Access Type: ${typeLabel}
+Valid Until: ${new Date(validUntil).toLocaleDateString('en-GB')}
+
+Open the Pipzo Mini App and paste this key to continue.`;
+
+  const userTelegramRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      chat_id: adminChatId,
-      text: message
+      chat_id: telegramId,
+      text: userMessage
     })
   });
 
-  const telegramData = await telegramRes.json();
+  const userTelegramData = await userTelegramRes.json();
 
-  if (!telegramData.ok) {
+  if (!userTelegramData.ok) {
     return json(res, 500, {
       ok: false,
-      message: telegramData.description || 'Could not send Telegram message.'
+      message: userTelegramData.description || 'License created, but could not send message to user.'
+    });
+  }
+
+  if (adminChatId) {
+    const adminMessage =
+`🔐 Auto License Generated
+
+👤 Name: ${displayName}
+📱 Username: ${username ? '@' + username : 'No username'}
+🆔 Telegram ID: ${telegramId}
+
+📌 Access: ${typeLabel}
+🗓 Valid Until: ${new Date(validUntil).toLocaleDateString('en-GB')}
+
+🔑 Key:
+${key}
+
+📝 Note:
+${note || 'No note'}`;
+
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        chat_id: adminChatId,
+        text: adminMessage
+      })
     });
   }
 
   return json(res, 200, {
     ok: true,
-    message: 'License request sent to admin.'
+    message: 'License key generated and sent to your Telegram.',
+    license: {
+      license_key: key,
+      allowed_account_type: request_type,
+      valid_until: validUntil
+    }
   });
 }
+
 
 async function handleCreateCommand(req, res, supabase) {
   const allowedCommands = [
