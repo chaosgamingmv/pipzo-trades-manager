@@ -79,7 +79,7 @@
 
       <section class="metrics">
         <article class="metric metric-wide">
-          <span>Worker status</span>
+          <span>Status</span>
           <strong id="workerStatus" class="status-off">Offline</strong>
         </article>
         <article class="metric">
@@ -98,6 +98,15 @@
           <span>Open trades</span>
           <strong id="openTrades">0</strong>
         </article>
+      </section>
+
+      <section class="vm-controls" aria-label="VM controls">
+        <button id="startMt5Btn" class="action primary compact-action" type="button">
+          <b>Start</b>
+        </button>
+        <button class="action icon-action" data-command="refresh_status" type="button" aria-label="Refresh">
+          <b>↻</b>
+        </button>
       </section>
 
       <!-- MT5 ACCOUNT SECTION -->
@@ -150,16 +159,6 @@
           </select>
         </div>
 
-        <div class="actions-grid start-grid">
-          <button id="startMt5Btn" class="action primary" type="button">
-            <b>Start</b>
-            <span>Open selected MT5 instance on VM/VPS</span>
-          </button>
-          <button class="action" data-command="refresh_status" type="button">
-            <b>Refresh</b>
-            <span>Update dashboard</span>
-          </button>
-        </div>
 
         <div class="manager-block">
           <h3>Buy Controls</h3>

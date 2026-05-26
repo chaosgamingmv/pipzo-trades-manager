@@ -73,7 +73,7 @@ textarea:disabled {
 .app {
   width: min(100%, 860px);
   margin: 0 auto;
-  padding: 18px;
+  padding: calc(24px + env(safe-area-inset-top)) 18px 18px;
   padding-bottom: max(28px, env(safe-area-inset-bottom));
 }
 
@@ -332,15 +332,25 @@ select.input option {
 /* Top bar */
 .topbar {
   position: sticky;
-  top: 0;
+  top: max(10px, env(safe-area-inset-top));
   z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 0 16px;
-  background: linear-gradient(180deg, rgba(5, 9, 20, .96), rgba(5, 9, 20, .76) 72%, transparent);
-  backdrop-filter: blur(16px);
+  gap: 14px;
+  margin: 0 0 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(135deg, rgba(59, 130, 246, 0.14), rgba(34, 211, 238, 0.08)),
+    rgba(15, 23, 42, 0.88);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px);
+}
+
+.topbar .kicker {
+  margin-bottom: 5px;
 }
 
 .profile {
@@ -514,10 +524,35 @@ select.input option {
   gap: 2px;
 }
 
-/* Trade manager */
-.start-grid {
-  margin-bottom: 16px;
+/* VM controls */
+.vm-controls {
+  display: grid;
+  grid-template-columns: 1fr 58px;
+  gap: 10px;
+  margin: -2px 0 12px;
 }
+
+.compact-action,
+.icon-action {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12px 14px;
+}
+
+.compact-action b,
+.icon-action b {
+  margin: 0;
+}
+
+.icon-action {
+  font-size: 22px;
+  line-height: 1;
+}
+
+/* Trade manager */
 
 .actions-grid {
   display: grid;
@@ -713,7 +748,7 @@ select.input option {
 /* Mobile */
 @media (max-width: 620px) {
   .app {
-    padding: 12px;
+    padding: calc(20px + env(safe-area-inset-top)) 12px 12px;
     padding-bottom: max(24px, env(safe-area-inset-bottom));
   }
 
@@ -729,7 +764,9 @@ select.input option {
   }
 
   .topbar {
-    padding-top: 8px;
+    top: max(8px, env(safe-area-inset-top));
+    padding: 12px;
+    border-radius: 20px;
   }
 
   .panel,
@@ -818,5 +855,12 @@ select.input option {
 
   .percent-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+
+@media (max-width: 380px) {
+  .vm-controls {
+    grid-template-columns: 1fr 54px;
   }
 }
