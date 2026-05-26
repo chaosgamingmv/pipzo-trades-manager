@@ -617,3 +617,90 @@ button {
     padding-top: 8px;
   }
 }
+
+/* Pipzo side-specific trade controls */
+.start-grid {
+  margin-bottom: 16px;
+}
+
+.manager-block {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--border, rgba(255,255,255,.1));
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.manager-block > h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.manager-block > p,
+.percent-block h4 {
+  margin: 0 0 12px;
+  color: var(--muted, #8c98aa);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.percent-block {
+  margin-top: 14px;
+}
+
+.percent-block h4 {
+  color: var(--text, #f7fbff);
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.percent-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mini-action {
+  border: 0;
+  border-radius: 13px;
+  min-height: 42px;
+  padding: 10px 8px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  background: rgba(255,255,255,.09);
+}
+
+.mini-action.success {
+  background: linear-gradient(135deg, #22c55e, #15803d);
+}
+
+.mini-action.danger {
+  background: linear-gradient(135deg, #ef4444, #991b1b);
+}
+
+.action.primary {
+  background: linear-gradient(135deg, #4e87c2, #1f5f9d);
+}
+
+.compact-tool {
+  margin-top: 14px;
+  margin-bottom: 0;
+}
+
+.split-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  .percent-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .split-buttons {
+    grid-template-columns: 1fr;
+  }
+}

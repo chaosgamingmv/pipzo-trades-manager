@@ -327,6 +327,126 @@ async function sendCommand(command, params = {}) {
   return res;
 }
 
+
+async function startSelectedMt5() {
+  const msg = document.getElementById('actionMsg');
+
+  if (!selectedMt5AccountId) {
+    msg.textContent = 'Please connect and select an MT5 account first.';
+    if (tg) tg.HapticFeedback?.notificationOccurred('error');
+    return;
+  }
+
+  msg.textContent = 'Sending start request to VM/VPS...';
+
+  const res = await api('start_mt5_account', {
+    mt5_account_id: selectedMt5AccountId
+  });
+
+  if (tg) {
+    tg.HapticFeedback?.notificationOccurred(res.ok ? 'success' : 'error');
+  }
+
+  if (res.ok) {
+    msg.textContent = res.message || 'Start request sent. VM/VPS will open this MT5 instance shortly.';
+    await loadMt5Account();
+    await loadStatus();
+  } else {
+    msg.textContent = res.message || 'Could not start MT5 account.';
+  }
+}
+
+function createPercentButtons() {
+  const options = [
+    { label: '25%', value: 25 },
+    { label: '50%', value: 50 },
+    { label: '75%', value: 75 },
+    { label: '90%', value: 90 },
+    { label: 'All', value: 100 }
+  ];
+
+  document.querySelectorAll('.percent-grid').forEach(grid => {
+    const side = grid.dataset.side;
+    const profitMode = grid.dataset.profitMode;
+
+    grid.innerHTML = options.map(opt => {
+      const dangerClass = profitMode === 'loss' ? 'danger' : 'success';
+      return `<button class="mini-action ${dangerClass}" type="button" data-side="${side}" data-profit-mode="${profitMode}" data-percent="${opt.value}">${opt.label}</button>`;
+    }).join('');
+  });
+
+  document.querySelectorAll('.mini-action[data-side][data-profit-mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const side = btn.dataset.side;
+      const profitMode = btn.dataset.profitMode;
+      const percent = Number(btn.dataset.percent || 100);
+
+      sendCommand(profitMode === 'profit' ? 'close_side_profit' : 'close_side_loss', {
+        side,
+        percent
+      });
+    });
+  });
+}
+
+function bindSideControls() {
+  document.querySelectorAll('[data-side-command]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sendCommand(btn.dataset.sideCommand, {
+        side: btn.dataset.side
+      });
+    });
+  });
+
+  const startBtn = document.getElementById('startMt5Btn');
+  if (startBtn) {
+    startBtn.addEventListener('click', startSelectedMt5);
+  }
+
+  const setBuySl = document.getElementById('setBuySl');
+  if (setBuySl) {
+    setBuySl.addEventListener('click', () => {
+      sendCommand('set_side_sl', {
+        side: 'buy',
+        sl_points: Number(document.getElementById('buySlPoints').value || 0)
+      });
+    });
+  }
+
+  const setBuyTp = document.getElementById('setBuyTp');
+  if (setBuyTp) {
+    setBuyTp.addEventListener('click', () => {
+      sendCommand('set_side_tp', {
+        side: 'buy',
+        tp_points: Number(document.getElementById('buyTpPoints').value || 0)
+      });
+    });
+  }
+
+  const setSellSl = document.getElementById('setSellSl');
+  if (setSellSl) {
+    setSellSl.addEventListener('click', () => {
+      sendCommand('set_side_sl', {
+        side: 'sell',
+        sl_points: Number(document.getElementById('sellSlPoints').value || 0)
+      });
+    });
+  }
+
+  const setSellTp = document.getElementById('setSellTp');
+  if (setSellTp) {
+    setSellTp.addEventListener('click', () => {
+      sendCommand('set_side_tp', {
+        side: 'sell',
+        tp_points: Number(document.getElementById('sellTpPoints').value || 0)
+      });
+    });
+  }
+}
+
+createPercentButtons();
+bindSideControls();
+
 document.querySelectorAll('[data-command]').forEach(btn => {
   btn.addEventListener('click', () => {
     const command = btn.dataset.command;

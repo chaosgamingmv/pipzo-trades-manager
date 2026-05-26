@@ -150,31 +150,117 @@
           </select>
         </div>
 
-        <div class="actions-grid">
-          <button class="action danger" data-command="close_all" data-confirm="true" type="button">
-            <b>Close All</b>
-            <span>Close every managed trade</span>
-          </button>
-          <button class="action success" data-command="close_profit" type="button">
-            <b>Close Profit</b>
-            <span>Close trades in profit</span>
-          </button>
-          <button class="action danger" data-command="close_loss" data-confirm="true" type="button">
-            <b>Close Loss</b>
-            <span>Close trades in loss</span>
-          </button>
-          <button class="action warning" data-command="close_half" data-confirm="true" type="button">
-            <b>Close Half</b>
-            <span>Partial close all trades</span>
-          </button>
-          <button class="action" data-command="breakeven" type="button">
-            <b>Breakeven</b>
-            <span>Move SL to entry</span>
+        <div class="actions-grid start-grid">
+          <button id="startMt5Btn" class="action primary" type="button">
+            <b>Start</b>
+            <span>Open selected MT5 instance on VM/VPS</span>
           </button>
           <button class="action" data-command="refresh_status" type="button">
             <b>Refresh</b>
             <span>Update dashboard</span>
           </button>
+        </div>
+
+        <div class="manager-block">
+          <h3>Buy Controls</h3>
+          <p>Manage BUY trades only. Percentage buttons close trades closest to current price first.</p>
+
+          <div class="actions-grid">
+            <button class="action" data-side-command="breakeven_side" data-side="buy" type="button">
+              <b>Buy BE</b>
+              <span>Move BUY SL to entry</span>
+            </button>
+          </div>
+
+          <div class="percent-block">
+            <h4>Buy Close Profit</h4>
+            <div class="percent-grid" data-side="buy" data-profit-mode="profit"></div>
+          </div>
+
+          <div class="percent-block">
+            <h4>Buy Close Loss</h4>
+            <div class="percent-grid" data-side="buy" data-profit-mode="loss"></div>
+          </div>
+
+          <div class="tool compact-tool">
+            <div>
+              <h3>Buy SL / TP</h3>
+              <p>Apply to BUY trades only, using points from open price.</p>
+            </div>
+            <div class="tool-form three">
+              <input id="buySlPoints" class="input" type="number" value="500" placeholder="Buy SL points" />
+              <input id="buyTpPoints" class="input" type="number" value="1000" placeholder="Buy TP points" />
+              <div class="split-buttons">
+                <button id="setBuySl" class="btn btn-secondary" type="button">Set Buy SL</button>
+                <button id="setBuyTp" class="btn btn-secondary" type="button">Set Buy TP</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="manager-block">
+          <h3>Sell Controls</h3>
+          <p>Manage SELL trades only. Percentage buttons close trades closest to current price first.</p>
+
+          <div class="actions-grid">
+            <button class="action" data-side-command="breakeven_side" data-side="sell" type="button">
+              <b>Sell BE</b>
+              <span>Move SELL SL to entry</span>
+            </button>
+          </div>
+
+          <div class="percent-block">
+            <h4>Sell Close Profit</h4>
+            <div class="percent-grid" data-side="sell" data-profit-mode="profit"></div>
+          </div>
+
+          <div class="percent-block">
+            <h4>Sell Close Loss</h4>
+            <div class="percent-grid" data-side="sell" data-profit-mode="loss"></div>
+          </div>
+
+          <div class="tool compact-tool">
+            <div>
+              <h3>Sell SL / TP</h3>
+              <p>Apply to SELL trades only, using points from open price.</p>
+            </div>
+            <div class="tool-form three">
+              <input id="sellSlPoints" class="input" type="number" value="500" placeholder="Sell SL points" />
+              <input id="sellTpPoints" class="input" type="number" value="1000" placeholder="Sell TP points" />
+              <div class="split-buttons">
+                <button id="setSellSl" class="btn btn-secondary" type="button">Set Sell SL</button>
+                <button id="setSellTp" class="btn btn-secondary" type="button">Set Sell TP</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="manager-block">
+          <h3>All Trade Controls</h3>
+          <p>General controls for every managed trade on the selected MT5 account.</p>
+
+          <div class="actions-grid">
+            <button class="action danger" data-command="close_all" data-confirm="true" type="button">
+              <b>Close All</b>
+              <span>Close every managed trade</span>
+            </button>
+            <button class="action success" data-command="close_profit" type="button">
+              <b>Close Profit</b>
+              <span>Close all profitable trades</span>
+            </button>
+            <button class="action danger" data-command="close_loss" data-confirm="true" type="button">
+              <b>Close Loss</b>
+              <span>Close all losing trades</span>
+            </button>
+            <button class="action warning" data-command="close_half" data-confirm="true" type="button">
+              <b>Close Half</b>
+              <span>Partial close all trades</span>
+            </button>
+            <button class="action" data-command="breakeven" type="button">
+              <b>Breakeven All</b>
+              <span>Move all SL to entry</span>
+            </button>
+          </div>
         </div>
 
         <div class="tool">
