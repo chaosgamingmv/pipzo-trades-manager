@@ -586,14 +586,6 @@ def execute_command(command):
         closed, failed, message = close_percent_of_positions(side, "profit", percent)
         return True, message
 
-    if cmd == "close_side_loss":
-        side = str(params.get("side", "")).lower()
-        percent = float(params.get("percent", 100))
-        if side not in ("buy", "sell"):
-            return False, "Invalid side. Use buy or sell."
-        closed, failed, message = close_percent_of_positions(side, "loss", percent)
-        return True, message
-
     if cmd == "breakeven_side":
         side = str(params.get("side", "")).lower()
         if side not in ("buy", "sell"):
@@ -601,21 +593,25 @@ def execute_command(command):
         affected, total = breakeven_side(side)
         return True, f"Moved {affected}/{total} {side.upper()} trades to breakeven."
 
-    if cmd == "set_side_sl":
+    if cmd == "modify_side":
         side = str(params.get("side", "")).lower()
-        sl_points = int(params.get("sl_points", 0))
-        if side not in ("buy", "sell"):
-            return False, "Invalid side. Use buy or sell."
-        modified, total = set_sltp_side(side, sl_points=sl_points, tp_points=0)
-        return True, f"Set SL on {modified}/{total} {side.upper()} trades."
+        sl_points = int(float(params.get("sl_points", 0) or 0))
+        tp_points = int(float(params.get("tp_points", 0) or 0))
 
-    if cmd == "set_side_tp":
-        side = str(params.get("side", "")).lower()
-        tp_points = int(params.get("tp_points", 0))
         if side not in ("buy", "sell"):
             return False, "Invalid side. Use buy or sell."
-        modified, total = set_sltp_side(side, sl_points=0, tp_points=tp_points)
-        return True, f"Set TP on {modified}/{total} {side.upper()} trades."
+
+        if sl_points <= 0 and tp_points <= 0:
+            return False, "Nothing to modify. Enter SL points or TP points greater than 0."
+
+        modified, total = set_sltp_side(side, sl_points=max(sl_points, 0), tp_points=max(tp_points, 0))
+        changed = []
+        if sl_points > 0:
+            changed.append(f"SL {sl_points} points")
+        if tp_points > 0:
+            changed.append(f"TP {tp_points} points")
+        changed_text = " and ".join(changed)
+        return True, f"Modified {changed_text} on {modified}/{total} {side.upper()} trades."
 
     if cmd == "breakeven":
         affected = 0

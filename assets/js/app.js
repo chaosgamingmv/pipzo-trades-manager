@@ -358,30 +358,28 @@ async function startSelectedMt5() {
 
 function createPercentButtons() {
   const options = [
+    { label: '10%', value: 10 },
     { label: '25%', value: 25 },
     { label: '50%', value: 50 },
     { label: '75%', value: 75 },
-    { label: '90%', value: 90 },
     { label: 'All', value: 100 }
   ];
 
   document.querySelectorAll('.percent-grid').forEach(grid => {
     const side = grid.dataset.side;
-    const profitMode = grid.dataset.profitMode;
 
     grid.innerHTML = options.map(opt => {
-      const dangerClass = profitMode === 'loss' ? 'danger' : 'success';
-      return `<button class="mini-action ${dangerClass}" type="button" data-side="${side}" data-profit-mode="${profitMode}" data-percent="${opt.value}">${opt.label}</button>`;
+      const sideClass = side === 'sell' ? 'danger' : 'success';
+      return `<button class="mini-action ${sideClass}" type="button" data-side="${side}" data-percent="${opt.value}">${opt.label}</button>`;
     }).join('');
   });
 
-  document.querySelectorAll('.mini-action[data-side][data-profit-mode]').forEach(btn => {
+  document.querySelectorAll('.mini-action[data-side][data-percent]').forEach(btn => {
     btn.addEventListener('click', () => {
       const side = btn.dataset.side;
-      const profitMode = btn.dataset.profitMode;
       const percent = Number(btn.dataset.percent || 100);
 
-      sendCommand(profitMode === 'profit' ? 'close_side_profit' : 'close_side_loss', {
+      sendCommand('close_side_profit', {
         side,
         percent
       });
@@ -403,44 +401,34 @@ function bindSideControls() {
     startBtn.addEventListener('click', startSelectedMt5);
   }
 
-  const setBuySl = document.getElementById('setBuySl');
-  if (setBuySl) {
-    setBuySl.addEventListener('click', () => {
-      sendCommand('set_side_sl', {
-        side: 'buy',
-        sl_points: Number(document.getElementById('buySlPoints').value || 0)
-      });
+  function sendModifySide(side) {
+    const slInput = document.getElementById(`${side}SlPoints`);
+    const tpInput = document.getElementById(`${side}TpPoints`);
+    const slPoints = Number(slInput?.value || 0);
+    const tpPoints = Number(tpInput?.value || 0);
+    const msg = document.getElementById('actionMsg');
+
+    if (slPoints <= 0 && tpPoints <= 0) {
+      msg.textContent = 'Enter SL points or TP points greater than 0 before modifying trades.';
+      if (tg) tg.HapticFeedback?.notificationOccurred('error');
+      return;
+    }
+
+    sendCommand('modify_side', {
+      side,
+      sl_points: slPoints > 0 ? slPoints : 0,
+      tp_points: tpPoints > 0 ? tpPoints : 0
     });
   }
 
-  const setBuyTp = document.getElementById('setBuyTp');
-  if (setBuyTp) {
-    setBuyTp.addEventListener('click', () => {
-      sendCommand('set_side_tp', {
-        side: 'buy',
-        tp_points: Number(document.getElementById('buyTpPoints').value || 0)
-      });
-    });
+  const modifyBuy = document.getElementById('modifyBuy');
+  if (modifyBuy) {
+    modifyBuy.addEventListener('click', () => sendModifySide('buy'));
   }
 
-  const setSellSl = document.getElementById('setSellSl');
-  if (setSellSl) {
-    setSellSl.addEventListener('click', () => {
-      sendCommand('set_side_sl', {
-        side: 'sell',
-        sl_points: Number(document.getElementById('sellSlPoints').value || 0)
-      });
-    });
-  }
-
-  const setSellTp = document.getElementById('setSellTp');
-  if (setSellTp) {
-    setSellTp.addEventListener('click', () => {
-      sendCommand('set_side_tp', {
-        side: 'sell',
-        tp_points: Number(document.getElementById('sellTpPoints').value || 0)
-      });
-    });
+  const modifySell = document.getElementById('modifySell');
+  if (modifySell) {
+    modifySell.addEventListener('click', () => sendModifySide('sell'));
   }
 }
 

@@ -173,27 +173,20 @@
           </div>
 
           <div class="percent-block">
-            <h4>Buy Close Profit</h4>
+            <h4>▲ Buy Layers — closes nearest to price</h4>
             <div class="percent-grid" data-side="buy" data-profit-mode="profit"></div>
           </div>
 
-          <div class="percent-block">
-            <h4>Buy Close Loss</h4>
-            <div class="percent-grid" data-side="buy" data-profit-mode="loss"></div>
-          </div>
 
           <div class="tool compact-tool">
             <div>
-              <h3>Buy SL / TP</h3>
-              <p>Apply to BUY trades only, using points from open price.</p>
+              <h3>Buy Modify</h3>
+              <p>Modify BUY trades only. Enter SL and/or TP points. Keep 0 to leave that value unchanged.</p>
             </div>
             <div class="tool-form three">
-              <input id="buySlPoints" class="input" type="number" value="500" placeholder="Buy SL points" />
-              <input id="buyTpPoints" class="input" type="number" value="1000" placeholder="Buy TP points" />
-              <div class="split-buttons">
-                <button id="setBuySl" class="btn btn-secondary" type="button">Set Buy SL</button>
-                <button id="setBuyTp" class="btn btn-secondary" type="button">Set Buy TP</button>
-              </div>
+              <input id="buySlPoints" class="input" type="number" value="0" min="0" placeholder="Buy SL points" />
+              <input id="buyTpPoints" class="input" type="number" value="0" min="0" placeholder="Buy TP points" />
+              <button id="modifyBuy" class="btn btn-secondary" type="button">Modify</button>
             </div>
           </div>
         </div>
@@ -210,27 +203,20 @@
           </div>
 
           <div class="percent-block">
-            <h4>Sell Close Profit</h4>
+            <h4>▼ Sell Layers — closes nearest to price</h4>
             <div class="percent-grid" data-side="sell" data-profit-mode="profit"></div>
           </div>
 
-          <div class="percent-block">
-            <h4>Sell Close Loss</h4>
-            <div class="percent-grid" data-side="sell" data-profit-mode="loss"></div>
-          </div>
 
           <div class="tool compact-tool">
             <div>
-              <h3>Sell SL / TP</h3>
-              <p>Apply to SELL trades only, using points from open price.</p>
+              <h3>Sell Modify</h3>
+              <p>Modify SELL trades only. Enter SL and/or TP points. Keep 0 to leave that value unchanged.</p>
             </div>
             <div class="tool-form three">
-              <input id="sellSlPoints" class="input" type="number" value="500" placeholder="Sell SL points" />
-              <input id="sellTpPoints" class="input" type="number" value="1000" placeholder="Sell TP points" />
-              <div class="split-buttons">
-                <button id="setSellSl" class="btn btn-secondary" type="button">Set Sell SL</button>
-                <button id="setSellTp" class="btn btn-secondary" type="button">Set Sell TP</button>
-              </div>
+              <input id="sellSlPoints" class="input" type="number" value="0" min="0" placeholder="Sell SL points" />
+              <input id="sellTpPoints" class="input" type="number" value="0" min="0" placeholder="Sell TP points" />
+              <button id="modifySell" class="btn btn-secondary" type="button">Modify</button>
             </div>
           </div>
         </div>
@@ -247,10 +233,6 @@
             <button class="action success" data-command="close_profit" type="button">
               <b>Close Profit</b>
               <span>Close all profitable trades</span>
-            </button>
-            <button class="action danger" data-command="close_loss" data-confirm="true" type="button">
-              <b>Close Loss</b>
-              <span>Close all losing trades</span>
             </button>
             <button class="action warning" data-command="close_half" data-confirm="true" type="button">
               <b>Close Half</b>

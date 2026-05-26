@@ -459,7 +459,6 @@ async function handleCreateCommand(req, res, supabase) {
   const allowedCommands = [
     'close_all',
     'close_profit',
-    'close_loss',
     'close_half',
     'close_less_profit',
     'breakeven',
@@ -467,10 +466,8 @@ async function handleCreateCommand(req, res, supabase) {
     'set_tp',
     'set_sltp',
     'close_side_profit',
-    'close_side_loss',
     'breakeven_side',
-    'set_side_sl',
-    'set_side_tp',
+    'modify_side',
     'refresh_status'
   ];
 
