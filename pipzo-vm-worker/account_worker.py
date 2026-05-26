@@ -550,13 +550,19 @@ def execute_command(command):
         return True, f"Closed {closed} trades with profit <= {max_profit:.2f}. Profit: {total:.2f}"
 
     if cmd == "close_half":
+        side = str(params.get("side", "")).lower()
         affected = 0
         failed = 0
 
-        if not ps:
-            return True, "No open trades found on this MT5 account."
+        close_ps = ps
+        if side in ("buy", "sell"):
+            close_ps = [p for p in ps if side_name(p) == side]
 
-        for p in ps:
+        if not close_ps:
+            side_label = f" {side.upper()}" if side in ("buy", "sell") else ""
+            return True, f"No open{side_label} trades found on this MT5 account."
+
+        for p in close_ps:
             half_volume = float(p.volume) / 2
             vol = normalize_volume(p.symbol, half_volume)
 
@@ -572,7 +578,7 @@ def execute_command(command):
 
         if affected == 0:
             return True, (
-                f"Close half reached MT5 but closed 0 of {len(ps)} trades. "
+                f"Close half reached MT5 but closed 0 of {len(close_ps)} trades. "
                 "Check worker log for MT5 retcode/filling-mode reason."
             )
 

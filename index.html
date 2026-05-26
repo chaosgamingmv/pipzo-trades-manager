@@ -170,6 +170,10 @@
               <b>Buy BE</b>
               <span>Move BUY SL to entry</span>
             </button>
+            <button class="action warning" data-side-command="close_half" data-side="buy" data-confirm="true" type="button">
+              <b>Buy Close Half</b>
+              <span>Close half volume on BUY trades</span>
+            </button>
           </div>
 
           <div class="percent-block">
@@ -181,11 +185,11 @@
           <div class="tool compact-tool">
             <div>
               <h3>Buy Modify</h3>
-              <p>Modify BUY trades only. Enter SL and/or TP points. Keep 0 to leave that value unchanged.</p>
+              <p>Modify BUY trades only. Enter the SL and/or TP points you want to apply.</p>
             </div>
             <div class="tool-form three">
-              <input id="buySlPoints" class="input" type="number" value="0" min="0" placeholder="Buy SL points" />
-              <input id="buyTpPoints" class="input" type="number" value="0" min="0" placeholder="Buy TP points" />
+              <input id="buySlPoints" class="input" type="number" min="0" placeholder="Enter Buy SL points" />
+              <input id="buyTpPoints" class="input" type="number" min="0" placeholder="Enter Buy TP points" />
               <button id="modifyBuy" class="btn btn-secondary" type="button">Modify</button>
             </div>
           </div>
@@ -200,6 +204,10 @@
               <b>Sell BE</b>
               <span>Move SELL SL to entry</span>
             </button>
+            <button class="action warning" data-side-command="close_half" data-side="sell" data-confirm="true" type="button">
+              <b>Sell Close Half</b>
+              <span>Close half volume on SELL trades</span>
+            </button>
           </div>
 
           <div class="percent-block">
@@ -211,11 +219,11 @@
           <div class="tool compact-tool">
             <div>
               <h3>Sell Modify</h3>
-              <p>Modify SELL trades only. Enter SL and/or TP points. Keep 0 to leave that value unchanged.</p>
+              <p>Modify SELL trades only. Enter the SL and/or TP points you want to apply.</p>
             </div>
             <div class="tool-form three">
-              <input id="sellSlPoints" class="input" type="number" value="0" min="0" placeholder="Sell SL points" />
-              <input id="sellTpPoints" class="input" type="number" value="0" min="0" placeholder="Sell TP points" />
+              <input id="sellSlPoints" class="input" type="number" min="0" placeholder="Enter Sell SL points" />
+              <input id="sellTpPoints" class="input" type="number" min="0" placeholder="Enter Sell TP points" />
               <button id="modifySell" class="btn btn-secondary" type="button">Modify</button>
             </div>
           </div>
@@ -234,10 +242,6 @@
               <b>Close Profit</b>
               <span>Close all profitable trades</span>
             </button>
-            <button class="action warning" data-command="close_half" data-confirm="true" type="button">
-              <b>Close Half</b>
-              <span>Partial close all trades</span>
-            </button>
             <button class="action" data-command="breakeven" type="button">
               <b>Breakeven All</b>
               <span>Move all SL to entry</span>
@@ -245,28 +249,7 @@
           </div>
         </div>
 
-        <div class="tool">
-          <div>
-            <h3>Close Low Profit</h3>
-            <p>Close profitable trades below or equal to amount.</p>
-          </div>
-          <div class="tool-form">
-            <input id="lessProfitAmount" class="input" type="number" step="0.01" value="2" />
-            <button id="closeLessProfit" class="btn btn-secondary" type="button">Close</button>
-          </div>
-        </div>
 
-        <div class="tool">
-          <div>
-            <h3>Set SL / TP</h3>
-            <p>Apply stop loss and take profit in points.</p>
-          </div>
-          <div class="tool-form three">
-            <input id="slPoints" class="input" type="number" value="500" placeholder="SL points" />
-            <input id="tpPoints" class="input" type="number" value="1000" placeholder="TP points" />
-            <button id="setSltp" class="btn btn-secondary" type="button">Apply</button>
-          </div>
-        </div>
 
         <p id="actionMsg" class="msg"></p>
       </section>

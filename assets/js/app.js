@@ -28,6 +28,7 @@ const tradeManagerSection = document.getElementById('tradeManagerSection');
 const accountPill = document.getElementById('accountPill');
 
 let pendingCommand = null;
+let pendingCommandPayload = null;
 let selectedRequestType = 'both';
 let linkedAccounts = [];
 let selectedAccount = null;
@@ -390,9 +391,14 @@ function createPercentButtons() {
 function bindSideControls() {
   document.querySelectorAll('[data-side-command]').forEach(btn => {
     btn.addEventListener('click', () => {
-      sendCommand(btn.dataset.sideCommand, {
-        side: btn.dataset.side
-      });
+      const command = btn.dataset.sideCommand;
+      const payload = { side: btn.dataset.side };
+
+      if (btn.dataset.confirm === 'true') {
+        openConfirm(command, payload);
+      } else {
+        sendCommand(command, payload);
+      }
     });
   });
 
@@ -448,34 +454,43 @@ document.querySelectorAll('[data-command]').forEach(btn => {
   });
 });
 
-document.getElementById('closeLessProfit').addEventListener('click', () => {
-  const maxProfit = Number(document.getElementById('lessProfitAmount').value || 0);
-  sendCommand('close_less_profit', { max_profit: maxProfit });
-});
+const closeLessProfitBtn = document.getElementById('closeLessProfit');
+if (closeLessProfitBtn) {
+  closeLessProfitBtn.addEventListener('click', () => {
+    const maxProfit = Number(document.getElementById('lessProfitAmount')?.value || 0);
+    sendCommand('close_less_profit', { max_profit: maxProfit });
+  });
+}
 
-document.getElementById('setSltp').addEventListener('click', () => {
-  const slPoints = Number(document.getElementById('slPoints').value || 0);
-  const tpPoints = Number(document.getElementById('tpPoints').value || 0);
-  sendCommand('set_sltp', { sl_points: slPoints, tp_points: tpPoints });
-});
+const setSltpBtn = document.getElementById('setSltp');
+if (setSltpBtn) {
+  setSltpBtn.addEventListener('click', () => {
+    const slPoints = Number(document.getElementById('slPoints')?.value || 0);
+    const tpPoints = Number(document.getElementById('tpPoints')?.value || 0);
+    sendCommand('set_sltp', { sl_points: slPoints, tp_points: tpPoints });
+  });
+}
 
-function openConfirm(command) {
+function openConfirm(command, payload = null) {
   pendingCommand = command;
+  pendingCommandPayload = payload;
   document.getElementById('confirmText').textContent = `Are you sure you want to run: ${command}?`;
   document.getElementById('confirmModal').classList.remove('hidden');
 }
 
 document.getElementById('cancelConfirm').addEventListener('click', () => {
   pendingCommand = null;
+  pendingCommandPayload = null;
   document.getElementById('confirmModal').classList.add('hidden');
 });
 
 document.getElementById('yesConfirm').addEventListener('click', async () => {
   if (pendingCommand) {
-    await sendCommand(pendingCommand);
+    await sendCommand(pendingCommand, pendingCommandPayload || {});
   }
 
   pendingCommand = null;
+  pendingCommandPayload = null;
   document.getElementById('confirmModal').classList.add('hidden');
 });
 
