@@ -471,6 +471,7 @@ async function handleCreateCommand(req, res, supabase) {
 
   const {
     initData = '',
+    mt5_account_id = '',
     command = '',
     params = {}
   } = req.body || {};
@@ -479,6 +480,13 @@ async function handleCreateCommand(req, res, supabase) {
     return json(res, 400, {
       ok: false,
       message: 'Invalid command'
+    });
+  }
+
+  if (!mt5_account_id) {
+    return json(res, 400, {
+      ok: false,
+      message: 'Please select an MT5 account first.'
     });
   }
 
@@ -520,14 +528,39 @@ async function handleCreateCommand(req, res, supabase) {
     });
   }
 
+  const { data: account, error: accountError } = await supabase
+    .from('mt5_accounts')
+    .select('id, license_key, telegram_id, mt5_login, mt5_server, is_active')
+    .eq('id', mt5_account_id)
+    .eq('telegram_id', telegramId)
+    .eq('license_key', appUser.license_key)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (accountError) throw accountError;
+
+  if (!account) {
+    return json(res, 403, {
+      ok: false,
+      message: 'Selected MT5 account was not found or does not belong to you.'
+    });
+  }
+
+  const commandParams = {
+    ...(params && typeof params === 'object' ? params : {}),
+    mt5_account_id: account.id,
+    mt5_login: account.mt5_login,
+    mt5_server: account.mt5_server
+  };
+
   const { data: inserted, error: insertError } = await supabase
     .from('ea_commands')
     .insert({
       license_key: appUser.license_key,
       telegram_id: telegramId,
-      mt5_account: license.mt5_account,
+      mt5_account: account.mt5_login,
       command,
-      params,
+      params: commandParams,
       status: 'pending'
     })
     .select()
@@ -538,7 +571,12 @@ async function handleCreateCommand(req, res, supabase) {
   return json(res, 200, {
     ok: true,
     message: 'Command queued',
-    command: inserted
+    command: inserted,
+    account: {
+      id: account.id,
+      mt5_login: account.mt5_login,
+      mt5_server: account.mt5_server
+    }
   });
 }
 
@@ -589,7 +627,8 @@ async function handleListCommands(req, res, supabase) {
 
 async function handleStatus(req, res, supabase) {
   const {
-    initData = ''
+    initData = '',
+    mt5_account_id = ''
   } = req.body || {};
 
   const tg = validateTelegramInitData(initData);
@@ -615,10 +654,35 @@ async function handleStatus(req, res, supabase) {
     });
   }
 
-  const { data, error } = await supabase
+  let mt5Login = '';
+
+  if (mt5_account_id) {
+    const { data: account, error: accountError } = await supabase
+      .from('mt5_accounts')
+      .select('mt5_login')
+      .eq('id', mt5_account_id)
+      .eq('telegram_id', telegramId)
+      .eq('license_key', appUser.license_key)
+      .maybeSingle();
+
+    if (accountError) throw accountError;
+    mt5Login = account?.mt5_login || '';
+  }
+
+  let query = supabase
     .from('ea_status')
     .select('*')
-    .eq('license_key', appUser.license_key)
+    .eq('license_key', appUser.license_key);
+
+  if (mt5Login) {
+    query = query.eq('mt5_account', mt5Login);
+  }
+
+  const { data, error } = await query
+    .order('updated_at', {
+      ascending: false
+    })
+    .limit(1)
     .maybeSingle();
 
   if (error) throw error;
@@ -742,27 +806,19 @@ async function handleEaPoll(req, res, supabase) {
     });
   }
 
-  if (mt5Account && !license.mt5_account) {
-    const { error: lockError } = await supabase
-      .from('license_keys')
-      .update({
-        mt5_account: mt5Account
-      })
-      .eq('license_key', licenseKey);
-
-    if (lockError) throw lockError;
-  } else if (mt5Account && license.mt5_account && license.mt5_account !== mt5Account) {
-    return json(res, 403, {
-      ok: false,
-      message: 'This license is locked to another MT5 account'
-    });
-  }
-
-  const { data: command, error: cmdError } = await supabase
+  let query = supabase
     .from('ea_commands')
     .select('*')
     .eq('license_key', licenseKey)
-    .eq('status', 'pending')
+    .eq('status', 'pending');
+
+  // Important for multi-account mode:
+  // each worker/terminal only picks commands for its own MT5 login.
+  if (mt5Account) {
+    query = query.eq('mt5_account', mt5Account);
+  }
+
+  const { data: command, error: cmdError } = await query
     .order('created_at', {
       ascending: true
     })
@@ -865,7 +921,7 @@ async function handleEaUpdateStatus(req, res, supabase) {
   const { data, error } = await supabase
     .from('ea_status')
     .upsert(payload, {
-      onConflict: 'license_key'
+      onConflict: 'license_key,mt5_account'
     })
     .select()
     .single();
@@ -957,20 +1013,92 @@ async function handleSaveMt5Account(req, res, supabase) {
     updated_at: new Date().toISOString()
   };
 
+  // Do not use onConflict: license_key here, because cloud mode can have
+  // more than one MT5 account under the same Telegram user/license.
+  const { data: existing, error: existingError } = await supabase
+    .from('mt5_accounts')
+    .select('id')
+    .eq('telegram_id', telegramId)
+    .eq('mt5_login', payload.mt5_login)
+    .eq('mt5_server', payload.mt5_server)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+
+  let result;
+  let saveError;
+
+  if (existing) {
+    const updateRes = await supabase
+      .from('mt5_accounts')
+      .update(payload)
+      .eq('id', existing.id)
+      .select('id, license_key, telegram_username, mt5_login, mt5_server, connection_status, created_at, updated_at')
+      .single();
+    result = updateRes.data;
+    saveError = updateRes.error;
+  } else {
+    const insertRes = await supabase
+      .from('mt5_accounts')
+      .insert(payload)
+      .select('id, license_key, telegram_username, mt5_login, mt5_server, connection_status, created_at, updated_at')
+      .single();
+    result = insertRes.data;
+    saveError = insertRes.error;
+  }
+
+  if (saveError) throw saveError;
+
+  return json(res, 200, {
+    ok: true,
+    message: 'MT5 account saved. Worker will connect shortly.',
+    account: result
+  });
+}
+
+async function handleGetMt5Accounts(req, res, supabase) {
+  const {
+    initData = ''
+  } = req.body || {};
+
+  const tg = validateTelegramInitData(initData);
+
+  if (!tg.ok) {
+    return json(res, 401, tg);
+  }
+
+  const telegramId = String(tg.user?.id || '');
+
+  const { data: appUser, error: userError } = await supabase
+    .from('app_users')
+    .select('license_key')
+    .eq('telegram_id', telegramId)
+    .maybeSingle();
+
+  if (userError) throw userError;
+
+  if (!appUser?.license_key) {
+    return json(res, 200, {
+      ok: true,
+      accounts: []
+    });
+  }
+
   const { data, error } = await supabase
     .from('mt5_accounts')
-    .upsert(payload, {
-      onConflict: 'license_key'
-    })
-    .select('id, license_key, telegram_username, mt5_login, mt5_server, connection_status, created_at, updated_at')
-    .single();
+    .select('id, license_key, telegram_username, mt5_login, mt5_server, connection_status, last_error, is_active, created_at, updated_at')
+    .eq('telegram_id', telegramId)
+    .eq('license_key', appUser.license_key)
+    .eq('is_active', true)
+    .order('created_at', {
+      ascending: false
+    });
 
   if (error) throw error;
 
   return json(res, 200, {
     ok: true,
-    message: 'MT5 account saved. Worker will connect shortly.',
-    account: data
+    accounts: data || []
   });
 }
 
@@ -1006,6 +1134,12 @@ async function handleGetMt5Account(req, res, supabase) {
     .from('mt5_accounts')
     .select('id, license_key, telegram_username, mt5_login, mt5_server, connection_status, last_error, is_active, created_at, updated_at')
     .eq('license_key', appUser.license_key)
+    .eq('telegram_id', telegramId)
+    .eq('is_active', true)
+    .order('created_at', {
+      ascending: false
+    })
+    .limit(1)
     .maybeSingle();
 
   if (error) throw error;
@@ -1047,11 +1181,22 @@ async function handleWorkerGetAccount(req, res, supabase) {
     });
   }
 
-  const { data: account, error: accountError } = await supabase
+  let accountQuery = supabase
     .from('mt5_accounts')
     .select('*')
     .eq('license_key', licenseKey)
-    .eq('is_active', true)
+    .eq('is_active', true);
+
+  const mt5AccountId = String((req.body || {}).mt5_account_id || '').trim();
+  if (mt5AccountId) {
+    accountQuery = accountQuery.eq('id', mt5AccountId);
+  }
+
+  const { data: account, error: accountError } = await accountQuery
+    .order('created_at', {
+      ascending: false
+    })
+    .limit(1)
     .maybeSingle();
 
   if (accountError) throw accountError;
@@ -1364,6 +1509,7 @@ export default async function handler(req, res) {
 
     if (route === 'save_mt5_account') return await handleSaveMt5Account(req, res, supabase);
     if (route === 'get_mt5_account') return await handleGetMt5Account(req, res, supabase);
+    if (route === 'get_mt5_accounts') return await handleGetMt5Accounts(req, res, supabase);
 
     if (route === 'worker_get_account') return await handleWorkerGetAccount(req, res, supabase);
     if (route === 'worker_get_next_account') return await handleWorkerGetNextAccount(req, res, supabase);

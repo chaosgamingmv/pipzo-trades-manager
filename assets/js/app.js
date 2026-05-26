@@ -29,6 +29,10 @@ const accountPill = document.getElementById('accountPill');
 
 let pendingCommand = null;
 let selectedRequestType = 'both';
+let linkedAccounts = [];
+let selectedAccount = null;
+let selectedMt5AccountId = localStorage.getItem('pipzo_selected_mt5_account_id') || '';
+
 
 function showScreen(screen) {
   licenseScreen.classList.remove('active');
@@ -227,29 +231,60 @@ document.getElementById('editAccountBtn').addEventListener('click', () => {
 
 async function loadMt5Account() {
   const card = document.getElementById('accountSummary');
+  const selectorBox = document.getElementById('accountSelectorBox');
+  const selector = document.getElementById('mt5AccountSelect');
 
-  const res = await api('get_mt5_account');
+  const res = await api('get_mt5_accounts');
 
-  if (!res.ok || !res.account) {
+  if (!res.ok || !Array.isArray(res.accounts) || res.accounts.length === 0) {
+    linkedAccounts = [];
+    selectedMt5AccountId = '';
+    localStorage.removeItem('pipzo_selected_mt5_account_id');
+
     card.innerHTML = '<span>No MT5 account connected yet.</span>';
     accountPill.textContent = 'Pending';
     accountPill.className = 'pill pending';
+
+    if (selectorBox) selectorBox.classList.add('hidden');
+    if (selector) selector.innerHTML = '<option value="">No account linked</option>';
+
     accountSection.classList.remove('hidden');
     tradeManagerSection.classList.add('hidden');
     return;
   }
 
-  const a = res.account;
+  linkedAccounts = res.accounts;
+
+  const savedStillExists = linkedAccounts.some(a => String(a.id) === String(selectedMt5AccountId));
+  if (!selectedMt5AccountId || !savedStillExists) {
+    selectedMt5AccountId = String(linkedAccounts[0].id);
+    localStorage.setItem('pipzo_selected_mt5_account_id', selectedMt5AccountId);
+  }
+
+  selectedAccount = linkedAccounts.find(a => String(a.id) === String(selectedMt5AccountId)) || linkedAccounts[0];
+
+  if (selector) {
+    selector.innerHTML = linkedAccounts.map(a => {
+      const selected = String(a.id) === String(selectedMt5AccountId) ? 'selected' : '';
+      const status = a.connection_status || 'pending';
+      return `<option value="${a.id}" ${selected}>${a.mt5_login} - ${a.mt5_server} (${status})</option>`;
+    }).join('');
+  }
+
+  if (selectorBox) selectorBox.classList.toggle('hidden', linkedAccounts.length <= 1);
+
+  const a = selectedAccount;
   const status = a.connection_status || 'pending';
 
   accountPill.textContent = status;
   accountPill.className = `pill ${status === 'connected' ? 'connected' : status === 'failed' ? 'failed' : 'pending'}`;
 
   card.innerHTML = `
-    <b>MT5 Account</b>
+    <b>Selected MT5 Account</b>
     <span>Login: ${a.mt5_login}</span>
     <span>Server: ${a.mt5_server}</span>
     <span>Status: ${status}</span>
+    ${linkedAccounts.length > 1 ? `<span>Total linked accounts: ${linkedAccounts.length}</span>` : ''}
     ${a.last_error ? `<span class="error-text">Error: ${a.last_error}</span>` : ''}
   `;
 
@@ -258,22 +293,33 @@ async function loadMt5Account() {
     tradeManagerSection.classList.remove('hidden');
   } else {
     accountSection.classList.remove('hidden');
-    tradeManagerSection.classList.add('hidden');
+    tradeManagerSection.classList.remove('hidden');
   }
 }
 
 async function sendCommand(command, params = {}) {
   const msg = document.getElementById('actionMsg');
-  msg.textContent = 'Sending command...';
 
-  const res = await api('create_command', { command, params });
+  if (!selectedMt5AccountId) {
+    msg.textContent = 'Please connect and select an MT5 account first.';
+    if (tg) tg.HapticFeedback?.notificationOccurred('error');
+    return { ok: false, message: 'No MT5 account selected' };
+  }
+
+  msg.textContent = `Sending ${command} to selected MT5 account...`;
+
+  const res = await api('create_command', {
+    mt5_account_id: selectedMt5AccountId,
+    command,
+    params
+  });
 
   if (tg) {
     tg.HapticFeedback?.notificationOccurred(res.ok ? 'success' : 'error');
   }
 
   if (res.ok) {
-    msg.textContent = 'Command sent. Worker will execute it shortly.';
+    msg.textContent = `Command sent to account ${selectedAccount?.mt5_login || ''}. Worker will execute it shortly.`;
   } else {
     msg.textContent = res.message || 'Command failed.';
   }
@@ -326,13 +372,20 @@ document.getElementById('yesConfirm').addEventListener('click', async () => {
 });
 
 async function loadStatus() {
-  const res = await api('status');
-  const s = res.status;
   const badge = document.getElementById('workerStatus');
+  const res = await api('status', {
+    mt5_account_id: selectedMt5AccountId || undefined
+  });
+
+  const s = res.status;
 
   if (!s) {
     badge.className = 'status-off';
     badge.textContent = 'Offline';
+    document.getElementById('balance').textContent = money(0);
+    document.getElementById('equity').textContent = money(0);
+    document.getElementById('floating').textContent = money(0);
+    document.getElementById('openTrades').textContent = 0;
     return;
   }
 
@@ -346,6 +399,17 @@ async function loadStatus() {
   document.getElementById('equity').textContent = money(s.equity);
   document.getElementById('floating').textContent = money(s.floating_profit);
   document.getElementById('openTrades').textContent = s.open_trades || 0;
+}
+
+const accountSelector = document.getElementById('mt5AccountSelect');
+if (accountSelector) {
+  accountSelector.addEventListener('change', async () => {
+    selectedMt5AccountId = accountSelector.value;
+    localStorage.setItem('pipzo_selected_mt5_account_id', selectedMt5AccountId);
+    selectedAccount = linkedAccounts.find(a => String(a.id) === String(selectedMt5AccountId)) || null;
+    await loadMt5Account();
+    await loadStatus();
+  });
 }
 
 checkMe();

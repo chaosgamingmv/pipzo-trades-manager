@@ -138,9 +138,16 @@
         <div class="panel-head">
           <div>
             <h2>Trade Manager</h2>
-            <p>Fast controls for your active MT5 account.</p>
+            <p>Fast controls for your selected MT5 account.</p>
           </div>
-          <button id="editAccountBtn" class="small-btn" type="button">Edit Account</button>
+          <button id="editAccountBtn" class="small-btn" type="button">Edit / Add Account</button>
+        </div>
+
+        <div id="accountSelectorBox" class="summary-box hidden">
+          <label class="label" for="mt5AccountSelect">Control Account</label>
+          <select id="mt5AccountSelect" class="input">
+            <option value="">Loading accounts...</option>
+          </select>
         </div>
 
         <div class="actions-grid">
