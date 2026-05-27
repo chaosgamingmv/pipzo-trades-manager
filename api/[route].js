@@ -638,17 +638,23 @@ async function handleStartMt5Account(req, res, supabase) {
     });
   }
 
+  const startRequestId = crypto.randomUUID();
+
   const { data: updated, error: updateError } = await supabase
     .from('mt5_accounts')
     .update({
       start_requested: true,
+      start_request_id: startRequestId,
       start_requested_at: new Date().toISOString(),
-      connection_status: account.connection_status === 'connected' ? 'connected' : 'pending',
+      // Start is a manual action. Always move ONLY this selected account back to pending.
+      // The VM claims accounts only when start_request_id is present, so old accounts
+      // cannot auto-open when the master worker restarts.
+      connection_status: 'pending',
       last_error: null,
       updated_at: new Date().toISOString()
     })
     .eq('id', account.id)
-    .select('id, mt5_login, mt5_server, connection_status, start_requested, start_requested_at')
+    .select('id, mt5_login, mt5_server, connection_status, start_requested, start_request_id, start_requested_at')
     .single();
 
   if (updateError) throw updateError;
@@ -1311,8 +1317,9 @@ async function handleWorkerGetNextAccount(req, res, supabase) {
     .select('*')
     .eq('is_active', true)
     .eq('start_requested', true)
-    .in('connection_status', ['pending', 'failed', 'connected'])
-    .order('updated_at', {
+    .not('start_request_id', 'is', null)
+    .eq('connection_status', 'pending')
+    .order('start_requested_at', {
       ascending: true
     })
     .limit(1)
@@ -1372,15 +1379,16 @@ async function handleWorkerClaimNextAccount(req, res, supabase) {
     });
   }
 
-  const staleTime = new Date(Date.now() - 60 * 1000).toISOString();
-
   const { data: candidates, error: candidateError } = await supabase
     .from('mt5_accounts')
     .select('*')
     .eq('is_active', true)
     .eq('start_requested', true)
-    .or(`assigned_worker_id.is.null,connection_status.eq.pending,connection_status.eq.failed,last_worker_heartbeat.lt.${staleTime}`)
-    .order('updated_at', {
+    .not('start_request_id', 'is', null)
+    // Important: do not auto-reopen old connected/running/stale accounts when the master worker starts.
+    // The VM should only claim accounts that have a fresh start_request_id from the Mini App Start button.
+    .eq('connection_status', 'pending')
+    .order('start_requested_at', {
       ascending: true
     })
     .limit(10);
@@ -1417,12 +1425,18 @@ async function handleWorkerClaimNextAccount(req, res, supabase) {
         assigned_worker_id: workerId,
         assigned_terminal_dir: terminalDir,
         connection_status: 'claimed',
+        // Consume the exact Start request after this selected account is claimed.
+        // This prevents every old/stale account from opening when VM/master restarts.
+        start_requested: false,
+        claimed_start_request_id: account.start_request_id,
+        start_request_id: null,
         started_at: new Date().toISOString(),
         claimed_at: new Date().toISOString(),
         last_worker_heartbeat: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
       .eq('id', account.id)
+      .eq('start_request_id', account.start_request_id)
       .select('*')
       .single();
 
@@ -1437,7 +1451,8 @@ async function handleWorkerClaimNextAccount(req, res, supabase) {
         mt5_password: updated.mt5_password,
         mt5_server: updated.mt5_server,
         telegram_username: updated.telegram_username,
-        assigned_terminal_dir: updated.assigned_terminal_dir
+        assigned_terminal_dir: updated.assigned_terminal_dir,
+        claimed_start_request_id: updated.claimed_start_request_id
       }
     });
   }

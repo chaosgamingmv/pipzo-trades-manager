@@ -139,7 +139,9 @@ def main():
         try:
             cleanup_dead_processes()
 
-            # Try claiming one account each loop. If many are pending, they will be picked up over several loops.
+            # Claim only accounts that were manually started from the Mini App.
+            # The API consumes the Start request after claim, so restarting this master worker
+            # will not reopen every old MT5 terminal automatically.
             account = claim_next_account()
             if account:
                 start_account_worker(account)
