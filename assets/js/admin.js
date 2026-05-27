@@ -1,64 +1,264 @@
 const API_BASE = '/api';
 
-const adminPasswordInput = document.getElementById('adminPassword');
-const loginBtn = document.getElementById('loginBtn');
-const loginMsg = document.getElementById('loginMsg');
-const adminPanel = document.getElementById('adminPanel');
-const generateBtn = document.getElementById('generateBtn');
-const refreshBtn = document.getElementById('refreshBtn');
-const keysTable = document.getElementById('keysTable');
-const generatedKey = document.getElementById('generatedKey');
+const $ = (id) => document.getElementById(id);
 
-let adminPassword = localStorage.getItem('pipzo_admin_password') || '';
+const state = {
+  adminPassword: localStorage.getItem('pipzo_admin_password') || '',
+  licenses: [],
+  users: [],
+  accounts: [],
+  commands: []
+};
+
+const els = {
+  loginCard: $('loginCard'),
+  adminPanel: $('adminPanel'),
+  adminPassword: $('adminPassword'),
+  loginBtn: $('loginBtn'),
+  loginMsg: $('loginMsg'),
+  logoutBtn: $('logoutBtn'),
+  refreshAllBtn: $('refreshAllBtn'),
+  refreshCommandsBtn: $('refreshCommandsBtn'),
+  generateBtn: $('generateBtn'),
+  generatedKey: $('generatedKey'),
+  licensesTable: $('licensesTable'),
+  usersTable: $('usersTable'),
+  accountsTable: $('accountsTable'),
+  commandsTable: $('commandsTable'),
+  licenseSearch: $('licenseSearch'),
+  userSearch: $('userSearch'),
+  accountSearch: $('accountSearch'),
+  toast: $('toast')
+};
 
 async function api(path, data = {}) {
   const res = await fetch(`${API_BASE}/${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...data, admin_password: adminPassword })
+    body: JSON.stringify({ ...data, admin_password: state.adminPassword })
   });
 
-  return await res.json();
+  const json = await res.json().catch(() => ({ ok: false, message: 'Invalid server response' }));
+
+  if (!res.ok && !json.message) {
+    json.message = `Request failed with status ${res.status}`;
+  }
+
+  return json;
 }
 
-function unlock() {
-  adminPanel.classList.remove('hidden');
-  loginMsg.textContent = 'Admin unlocked.';
-  loadKeys();
+function toast(message) {
+  els.toast.textContent = message;
+  els.toast.classList.add('show');
+  setTimeout(() => els.toast.classList.remove('show'), 2600);
 }
 
-loginBtn.addEventListener('click', async () => {
-  adminPassword = adminPasswordInput.value.trim();
+function fmtDate(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+}
 
-  if (!adminPassword) {
-    loginMsg.textContent = 'Enter admin password.';
+function isExpired(value) {
+  return value ? new Date(value).getTime() < Date.now() : false;
+}
+
+function textIncludes(row, term) {
+  if (!term) return true;
+  return JSON.stringify(row || {}).toLowerCase().includes(term.toLowerCase());
+}
+
+function statusPill(text, type = 'blue') {
+  return `<span class="pill ${type}">${text}</span>`;
+}
+
+function accountOnline(account) {
+  const status = String(account.connection_status || '').toLowerCase();
+  const ping = account.last_worker_heartbeat || account.updated_at;
+  const pingMs = ping ? new Date(ping).getTime() : 0;
+  const fresh = pingMs && Date.now() - pingMs < 90 * 1000;
+  return ['running', 'connected', 'online'].includes(status) || fresh;
+}
+
+function showApp() {
+  els.loginCard.classList.add('hidden');
+  els.adminPanel.classList.remove('hidden');
+  els.logoutBtn.classList.remove('hidden');
+}
+
+function showLogin(message = '') {
+  els.loginCard.classList.remove('hidden');
+  els.adminPanel.classList.add('hidden');
+  els.logoutBtn.classList.add('hidden');
+  els.loginMsg.textContent = message;
+}
+
+async function unlock() {
+  els.loginMsg.textContent = 'Checking...';
+  const res = await api('admin_dashboard');
+
+  if (!res.ok) {
+    showLogin(res.message || 'Invalid admin password.');
     return;
   }
 
-  localStorage.setItem('pipzo_admin_password', adminPassword);
+  showApp();
+  applyAdminData(res);
+  toast('Admin unlocked');
+}
 
-  const res = await api('admin_list_keys');
+function applyAdminData(res) {
+  state.licenses = res.licenses || [];
+  state.users = res.users || [];
+  state.accounts = res.accounts || [];
+  state.commands = res.commands || [];
 
-  if (res.ok) {
-    unlock();
-  } else {
-    loginMsg.textContent = res.message || 'Invalid admin password.';
+  const activeLicenses = state.licenses.filter(x => x.is_active && !isExpired(x.valid_until)).length;
+  const expiredLicenses = state.licenses.filter(x => isExpired(x.valid_until)).length;
+  const onlineAccounts = state.accounts.filter(accountOnline).length;
+  const pendingCommands = state.commands.filter(x => ['pending', 'processing'].includes(String(x.status || '').toLowerCase())).length;
+
+  $('statUsers').textContent = state.users.length;
+  $('statActiveLicenses').textContent = activeLicenses;
+  $('statExpiredLicenses').textContent = expiredLicenses;
+  $('statOnlineAccounts').textContent = onlineAccounts;
+  $('statOfflineAccounts').textContent = Math.max(state.accounts.length - onlineAccounts, 0);
+  $('statPendingCommands').textContent = pendingCommands;
+
+  renderLicenses();
+  renderUsers();
+  renderAccounts();
+  renderCommands();
+}
+
+async function refreshAll() {
+  els.refreshAllBtn.disabled = true;
+  els.refreshAllBtn.textContent = 'Refreshing...';
+  const res = await api('admin_dashboard');
+  els.refreshAllBtn.disabled = false;
+  els.refreshAllBtn.textContent = '⟳ Refresh';
+
+  if (!res.ok) {
+    toast(res.message || 'Could not refresh admin data');
+    return;
   }
-});
 
-generateBtn.addEventListener('click', async () => {
-  const label = document.getElementById('label').value.trim();
-  const validUntil = document.getElementById('validUntil').value;
-  const accountType = document.getElementById('accountType').value;
+  applyAdminData(res);
+  toast('Updated');
+}
+
+function renderLicenses() {
+  const term = els.licenseSearch.value.trim();
+  const rows = state.licenses.filter(row => textIncludes(row, term));
+
+  els.licensesTable.innerHTML = rows.length ? '' : `<tr><td colspan="6">No licenses found.</td></tr>`;
+
+  rows.forEach(row => {
+    const expired = isExpired(row.valid_until);
+    const active = row.is_active && !expired;
+    const user = row.telegram_username ? `@${row.telegram_username}` : (row.telegram_id || row.label || '-');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><code>${row.license_key || '-'}</code><br><span class="muted">${row.label || ''}</span></td>
+      <td>${user}</td>
+      <td>${row.allowed_account_type || 'both'}</td>
+      <td>${fmtDate(row.valid_until)}</td>
+      <td>${active ? statusPill('Active', 'green') : expired ? statusPill('Expired', 'yellow') : statusPill('Inactive', 'red')}</td>
+      <td>
+        <div class="row-actions">
+          <button class="ghost-btn" data-action="extend-license" data-id="${row.id}" data-days="30">+30d</button>
+          <button class="ghost-btn" data-action="extend-license" data-id="${row.id}" data-days="7">+7d</button>
+          <button class="${row.is_active ? 'danger-btn' : 'success-btn'}" data-action="toggle-license" data-id="${row.id}" data-active="${row.is_active ? 'false' : 'true'}">${row.is_active ? 'Disable' : 'Enable'}</button>
+        </div>
+      </td>
+    `;
+    els.licensesTable.appendChild(tr);
+  });
+}
+
+function renderUsers() {
+  const term = els.userSearch.value.trim();
+  const rows = state.users.filter(row => textIncludes(row, term));
+
+  els.usersTable.innerHTML = rows.length ? '' : `<tr><td colspan="5">No users found.</td></tr>`;
+
+  rows.forEach(row => {
+    const name = [row.first_name, row.last_name].filter(Boolean).join(' ') || row.telegram_username || 'Unknown';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${name}</strong><br><span class="muted">${row.telegram_username ? '@' + row.telegram_username : ''}</span></td>
+      <td>${row.telegram_id || '-'}</td>
+      <td><code>${row.license_key || '-'}</code></td>
+      <td>${row.is_active ? statusPill('Active', 'green') : statusPill('Inactive', 'red')}</td>
+      <td>${fmtDate(row.last_login)}</td>
+    `;
+    els.usersTable.appendChild(tr);
+  });
+}
+
+function renderAccounts() {
+  const term = els.accountSearch.value.trim();
+  const rows = state.accounts.filter(row => textIncludes(row, term));
+
+  els.accountsTable.innerHTML = rows.length ? '' : `<tr><td colspan="7">No MT5 accounts found.</td></tr>`;
+
+  rows.forEach(row => {
+    const online = accountOnline(row);
+    const manageTrades = row.algo_trading_allowed === true ? statusPill('On', 'green') : row.algo_trading_allowed === false ? statusPill('Off', 'red') : statusPill('Unknown', 'yellow');
+    const user = row.telegram_username ? `@${row.telegram_username}` : (row.telegram_id || '-');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${row.mt5_login || '-'}</strong><br><span class="muted">${row.account_name || row.broker || ''}</span></td>
+      <td>${user}<br><span class="muted"><code>${row.license_key || '-'}</code></span></td>
+      <td>${row.mt5_server || '-'}</td>
+      <td>${online ? statusPill('Online', 'green') : statusPill(row.connection_status || 'Offline', 'red')}<br><span class="muted">${row.last_error || ''}</span></td>
+      <td>${manageTrades}</td>
+      <td>${fmtDate(row.last_worker_heartbeat || row.updated_at)}</td>
+      <td>
+        <div class="row-actions">
+          <button class="ghost-btn" data-action="reset-start" data-id="${row.id}">Reset Start</button>
+          <button class="warning-btn" data-action="force-stop" data-id="${row.id}">Force Stop</button>
+          <button class="${row.is_active ? 'danger-btn' : 'success-btn'}" data-action="toggle-account" data-id="${row.id}" data-active="${row.is_active ? 'false' : 'true'}">${row.is_active ? 'Disable' : 'Enable'}</button>
+        </div>
+      </td>
+    `;
+    els.accountsTable.appendChild(tr);
+  });
+}
+
+function renderCommands() {
+  els.commandsTable.innerHTML = state.commands.length ? '' : `<tr><td colspan="6">No commands found.</td></tr>`;
+
+  state.commands.forEach(row => {
+    const status = String(row.status || 'pending').toLowerCase();
+    const type = status === 'executed' || status === 'done' ? 'green' : status === 'failed' || status === 'error' ? 'red' : status === 'processing' ? 'yellow' : 'blue';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${row.command || '-'}</strong></td>
+      <td>${row.mt5_account || row.params?.mt5_login || '-'}</td>
+      <td>${row.telegram_id || '-'}</td>
+      <td>${statusPill(row.status || 'pending', type)}</td>
+      <td>${row.result || row.error || '-'}</td>
+      <td>${fmtDate(row.created_at)}</td>
+    `;
+    els.commandsTable.appendChild(tr);
+  });
+}
+
+async function generateLicense() {
+  const label = $('label').value.trim();
+  const validUntil = $('validUntil').value;
+  const accountType = $('accountType').value;
 
   if (!validUntil) {
-    generatedKey.classList.remove('hidden');
-    generatedKey.textContent = 'Please select validity date.';
+    els.generatedKey.classList.remove('hidden');
+    els.generatedKey.textContent = 'Please select validity date.';
     return;
   }
 
-  generateBtn.disabled = true;
-  generateBtn.textContent = 'Generating...';
+  els.generateBtn.disabled = true;
+  els.generateBtn.textContent = 'Generating...';
 
   const res = await api('admin_generate_key', {
     label,
@@ -66,46 +266,106 @@ generateBtn.addEventListener('click', async () => {
     allowed_account_type: accountType
   });
 
-  generateBtn.disabled = false;
-  generateBtn.textContent = 'Generate Key';
-
-  generatedKey.classList.remove('hidden');
-
-  if (res.ok) {
-    generatedKey.textContent = `Generated Key: ${res.license.license_key}`;
-    await loadKeys();
-  } else {
-    generatedKey.textContent = res.message || 'Could not generate key.';
-  }
-});
-
-refreshBtn.addEventListener('click', loadKeys);
-
-async function loadKeys() {
-  const res = await api('admin_list_keys');
-
-  keysTable.innerHTML = '';
+  els.generateBtn.disabled = false;
+  els.generateBtn.textContent = 'Generate Key';
+  els.generatedKey.classList.remove('hidden');
 
   if (!res.ok) {
-    keysTable.innerHTML = `<tr><td colspan="7">${res.message || 'Could not load keys.'}</td></tr>`;
+    els.generatedKey.textContent = res.message || 'Could not generate key.';
     return;
   }
 
-  (res.keys || []).forEach(row => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><code>${row.license_key}</code></td>
-      <td>${row.label || ''}</td>
-      <td>${row.telegram_username || row.telegram_id || ''}</td>
-      <td>${row.mt5_account || ''}</td>
-      <td>${row.allowed_account_type || ''}</td>
-      <td>${row.valid_until ? new Date(row.valid_until).toLocaleDateString() : ''}</td>
-      <td>${row.is_active ? 'Yes' : 'No'}</td>
-    `;
-    keysTable.appendChild(tr);
+  els.generatedKey.innerHTML = `Generated Key: <code>${res.license.license_key}</code>`;
+  await refreshAll();
+}
+
+async function updateLicense(id, payload) {
+  const res = await api('admin_update_license', { id, ...payload });
+  if (!res.ok) return toast(res.message || 'Could not update license');
+  toast('License updated');
+  await refreshAll();
+}
+
+async function updateAccount(id, payload) {
+  const res = await api('admin_update_account', { id, ...payload });
+  if (!res.ok) return toast(res.message || 'Could not update account');
+  toast('Account updated');
+  await refreshAll();
+}
+
+function bindTables() {
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+
+    const id = btn.dataset.id;
+    const action = btn.dataset.action;
+
+    if (action === 'extend-license') {
+      return updateLicense(id, { action: 'extend', days: Number(btn.dataset.days || 30) });
+    }
+
+    if (action === 'toggle-license') {
+      return updateLicense(id, { action: 'set_active', is_active: btn.dataset.active === 'true' });
+    }
+
+    if (action === 'reset-start') {
+      return updateAccount(id, { action: 'reset_start' });
+    }
+
+    if (action === 'force-stop') {
+      return updateAccount(id, { action: 'force_stop' });
+    }
+
+    if (action === 'toggle-account') {
+      return updateAccount(id, { action: 'set_active', is_active: btn.dataset.active === 'true' });
+    }
   });
 }
 
-if (adminPassword) {
-  adminPasswordInput.value = adminPassword;
+function bindTabs() {
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(x => x.classList.remove('active'));
+      tab.classList.add('active');
+      $(`tab-${tab.dataset.tab}`).classList.add('active');
+    });
+  });
+}
+
+els.loginBtn.addEventListener('click', async () => {
+  state.adminPassword = els.adminPassword.value.trim();
+  if (!state.adminPassword) {
+    els.loginMsg.textContent = 'Enter admin password.';
+    return;
+  }
+  localStorage.setItem('pipzo_admin_password', state.adminPassword);
+  await unlock();
+});
+
+els.adminPassword.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') els.loginBtn.click();
+});
+
+els.logoutBtn.addEventListener('click', () => {
+  localStorage.removeItem('pipzo_admin_password');
+  state.adminPassword = '';
+  els.adminPassword.value = '';
+  showLogin('Logged out.');
+});
+
+els.refreshAllBtn.addEventListener('click', refreshAll);
+els.refreshCommandsBtn.addEventListener('click', refreshAll);
+els.generateBtn.addEventListener('click', generateLicense);
+els.licenseSearch.addEventListener('input', renderLicenses);
+els.userSearch.addEventListener('input', renderUsers);
+els.accountSearch.addEventListener('input', renderAccounts);
+
+bindTabs();
+bindTables();
+
+if (state.adminPassword) {
+  els.adminPassword.value = state.adminPassword;
+  unlock();
 }

@@ -2,77 +2,209 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Pipzo Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pipzo Admin Panel</title>
   <link rel="stylesheet" href="assets/css/admin.css">
 </head>
 <body>
-  <header>
-    <h1>Pipzo Admin</h1>
-    <span>License Manager</span>
+  <div class="admin-bg"></div>
+
+  <header class="admin-header">
+    <div class="brand-wrap">
+      <div class="brand-mark">P</div>
+      <div>
+        <p class="eyebrow">Pipzo</p>
+        <h1>Admin Panel</h1>
+      </div>
+    </div>
+    <button id="logoutBtn" class="ghost-btn small hidden">Logout</button>
   </header>
 
-  <main>
-    <section class="card">
+  <main class="admin-shell">
+    <section id="loginCard" class="login-card card">
+      <p class="eyebrow">Secure Access</p>
       <h2>Admin Login</h2>
-      <p class="muted">Enter your admin password to generate and view keys.</p>
-      <input id="adminPassword" type="password" placeholder="Admin password">
-      <button id="loginBtn">Unlock Admin</button>
+      <p class="muted">Enter your admin password to manage licenses, users, MT5 accounts, and worker status.</p>
+      <div class="form-row single">
+        <label>
+          Admin Password
+          <input id="adminPassword" type="password" placeholder="Enter admin password">
+        </label>
+        <button id="loginBtn">Unlock Admin</button>
+      </div>
       <p id="loginMsg" class="message"></p>
     </section>
 
     <section id="adminPanel" class="hidden">
-      <section class="card">
-        <h2>Generate License Key</h2>
-        <div class="grid">
-          <label>
-            Label / Friend Name
-            <input id="label" placeholder="Example: Ahmed">
-          </label>
-
-          <label>
-            Valid Until
-            <input id="validUntil" type="date">
-          </label>
-
-          <label>
-            Account Type
-            <select id="accountType">
-              <option value="both">Demo + Real</option>
-              <option value="demo">Demo Only</option>
-              <option value="real">Real Only</option>
-            </select>
-          </label>
-
-          <button id="generateBtn">Generate Key</button>
+      <section class="hero-card card">
+        <div>
+          <p class="eyebrow">Overview</p>
+          <h2>Pipzo Control Center</h2>
+          <p class="muted">Manage users, licenses, account status, and VM worker controls from one place.</p>
         </div>
-
-        <div id="generatedKey" class="generated hidden"></div>
+        <div class="hero-actions">
+          <button id="refreshAllBtn" class="ghost-btn">⟳ Refresh</button>
+        </div>
       </section>
 
-      <section class="card">
-        <h2>License Keys</h2>
-        <button id="refreshBtn">Refresh Keys</button>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Key</th>
-                <th>Label</th>
-                <th>Telegram</th>
-                <th>MT5 Account</th>
-                <th>Type</th>
-                <th>Valid Until</th>
-                <th>Active</th>
-              </tr>
-            </thead>
-            <tbody id="keysTable"></tbody>
-          </table>
-        </div>
+      <section class="stats-grid">
+        <div class="stat-card"><span>Total Users</span><strong id="statUsers">0</strong></div>
+        <div class="stat-card"><span>Active Licenses</span><strong id="statActiveLicenses">0</strong></div>
+        <div class="stat-card"><span>Expired Licenses</span><strong id="statExpiredLicenses">0</strong></div>
+        <div class="stat-card"><span>MT5 Online</span><strong id="statOnlineAccounts">0</strong></div>
+        <div class="stat-card"><span>MT5 Offline</span><strong id="statOfflineAccounts">0</strong></div>
+        <div class="stat-card"><span>Pending Commands</span><strong id="statPendingCommands">0</strong></div>
+      </section>
+
+      <nav class="tabs" aria-label="Admin sections">
+        <button class="tab active" data-tab="licenses">Licenses</button>
+        <button class="tab" data-tab="users">Users</button>
+        <button class="tab" data-tab="accounts">MT5 Accounts</button>
+        <button class="tab" data-tab="commands">Commands</button>
+      </nav>
+
+      <section id="tab-licenses" class="tab-panel active">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Licenses</p>
+              <h2>Create License</h2>
+            </div>
+          </div>
+
+          <div class="form-grid license-grid">
+            <label>
+              Label / Friend Name
+              <input id="label" placeholder="Example: Ahmed">
+            </label>
+            <label>
+              Valid Until
+              <input id="validUntil" type="date">
+            </label>
+            <label>
+              Account Type
+              <select id="accountType">
+                <option value="both">Demo + Real</option>
+                <option value="demo">Demo Only</option>
+                <option value="real">Real Only</option>
+              </select>
+            </label>
+            <button id="generateBtn">Generate Key</button>
+          </div>
+
+          <div id="generatedKey" class="generated hidden"></div>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">License Manager</p>
+              <h2>License Keys</h2>
+            </div>
+            <input id="licenseSearch" class="search-input" placeholder="Search key, label, username...">
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Key</th>
+                  <th>User</th>
+                  <th>Type</th>
+                  <th>Valid Until</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="licensesTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="tab-users" class="tab-panel">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Users</p>
+              <h2>Telegram Users</h2>
+            </div>
+            <input id="userSearch" class="search-input" placeholder="Search Telegram users...">
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Telegram ID</th>
+                  <th>License</th>
+                  <th>Status</th>
+                  <th>Last Login</th>
+                </tr>
+              </thead>
+              <tbody id="usersTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="tab-accounts" class="tab-panel">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">MT5</p>
+              <h2>Linked Accounts</h2>
+            </div>
+            <input id="accountSearch" class="search-input" placeholder="Search login, server, user...">
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>MT5 Login</th>
+                  <th>User</th>
+                  <th>Server</th>
+                  <th>Status</th>
+                  <th>Manage Trades</th>
+                  <th>Last Ping</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="accountsTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="tab-commands" class="tab-panel">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Commands</p>
+              <h2>Latest Trade Commands</h2>
+            </div>
+            <button id="refreshCommandsBtn" class="ghost-btn small">Refresh</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Command</th>
+                  <th>MT5</th>
+                  <th>User</th>
+                  <th>Status</th>
+                  <th>Result / Error</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody id="commandsTable"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
     </section>
   </main>
 
+  <div id="toast" class="toast"></div>
   <script src="assets/js/admin.js"></script>
 </body>
 </html>

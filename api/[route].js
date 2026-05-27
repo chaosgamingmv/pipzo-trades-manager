@@ -859,6 +859,222 @@ async function handleAdminListKeys(req, res, supabase) {
   });
 }
 
+
+function requireAdminPassword(req, res) {
+  const { admin_password = '' } = req.body || {};
+
+  if (!process.env.ADMIN_PASSWORD || admin_password !== process.env.ADMIN_PASSWORD) {
+    json(res, 401, {
+      ok: false,
+      message: 'Invalid admin password'
+    });
+    return false;
+  }
+
+  return true;
+}
+
+async function safeSelect(supabase, table, queryBuilder) {
+  try {
+    const query = queryBuilder ? queryBuilder(supabase.from(table)) : supabase.from(table).select('*');
+    const { data, error } = await query;
+
+    if (error) {
+      return [];
+    }
+
+    return data || [];
+  } catch {
+    return [];
+  }
+}
+
+async function handleAdminDashboard(req, res, supabase) {
+  if (!requireAdminPassword(req, res)) return;
+
+  const [licenses, users, accountsRaw, commands, statuses] = await Promise.all([
+    safeSelect(supabase, 'license_keys', q => q.select('*').order('created_at', { ascending: false }).limit(300)),
+    safeSelect(supabase, 'app_users', q => q.select('*').order('created_at', { ascending: false }).limit(300)),
+    safeSelect(supabase, 'mt5_accounts', q => q.select('*').order('created_at', { ascending: false }).limit(300)),
+    safeSelect(supabase, 'ea_commands', q => q.select('*').order('created_at', { ascending: false }).limit(80)),
+    safeSelect(supabase, 'ea_status', q => q.select('*').order('updated_at', { ascending: false }).limit(300))
+  ]);
+
+  const statusMap = new Map();
+  for (const status of statuses) {
+    const key = `${status.license_key || ''}:${status.mt5_account || ''}`;
+    if (!statusMap.has(key)) {
+      statusMap.set(key, status);
+    }
+  }
+
+  const accounts = (accountsRaw || []).map(account => {
+    const status = statusMap.get(`${account.license_key || ''}:${account.mt5_login || ''}`) || {};
+
+    return {
+      ...account,
+      algo_trading_allowed: status.algo_trading_allowed,
+      account_trade_allowed: status.account_trade_allowed,
+      balance: status.balance,
+      equity: status.equity,
+      open_trades: status.open_trades,
+      last_seen: status.last_seen
+    };
+  });
+
+  return json(res, 200, {
+    ok: true,
+    licenses,
+    users,
+    accounts,
+    commands
+  });
+}
+
+async function handleAdminUpdateLicense(req, res, supabase) {
+  if (!requireAdminPassword(req, res)) return;
+
+  const {
+    id = '',
+    action = '',
+    days = 30,
+    is_active = null,
+    valid_until = ''
+  } = req.body || {};
+
+  if (!id) {
+    return json(res, 400, {
+      ok: false,
+      message: 'License id is required'
+    });
+  }
+
+  const update = {};
+
+  if (action === 'set_active') {
+    update.is_active = Boolean(is_active);
+  } else if (action === 'extend') {
+    const { data: current, error: currentError } = await supabase
+      .from('license_keys')
+      .select('valid_until')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (currentError) throw currentError;
+
+    const baseTime = current?.valid_until && new Date(current.valid_until).getTime() > Date.now()
+      ? new Date(current.valid_until).getTime()
+      : Date.now();
+
+    const extraDays = Number(days || 30);
+    update.valid_until = new Date(baseTime + extraDays * 24 * 60 * 60 * 1000).toISOString();
+    update.is_active = true;
+  } else if (action === 'set_valid_until') {
+    if (!valid_until) {
+      return json(res, 400, {
+        ok: false,
+        message: 'valid_until is required'
+      });
+    }
+    update.valid_until = new Date(`${valid_until}T23:59:59.000Z`).toISOString();
+  } else {
+    return json(res, 400, {
+      ok: false,
+      message: 'Invalid license action'
+    });
+  }
+
+  const { data, error } = await supabase
+    .from('license_keys')
+    .update(update)
+    .eq('id', id)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+
+  return json(res, 200, {
+    ok: true,
+    license: data
+  });
+}
+
+async function handleAdminUpdateAccount(req, res, supabase) {
+  if (!requireAdminPassword(req, res)) return;
+
+  const {
+    id = '',
+    action = '',
+    is_active = null
+  } = req.body || {};
+
+  if (!id) {
+    return json(res, 400, {
+      ok: false,
+      message: 'MT5 account id is required'
+    });
+  }
+
+  const now = new Date().toISOString();
+  let update = {
+    updated_at: now
+  };
+
+  if (action === 'set_active') {
+    update.is_active = Boolean(is_active);
+    if (!update.is_active) {
+      update.connection_status = 'disabled';
+      update.start_requested = false;
+      update.start_request_id = null;
+      update.claimed_start_request_id = null;
+    }
+  } else if (action === 'reset_start') {
+    update = {
+      ...update,
+      start_requested: false,
+      start_request_id: null,
+      start_requested_at: null,
+      claimed_start_request_id: null,
+      claimed_at: null,
+      connection_status: 'stopped'
+    };
+  } else if (action === 'force_stop') {
+    update = {
+      ...update,
+      start_requested: false,
+      start_request_id: null,
+      start_requested_at: null,
+      claimed_start_request_id: null,
+      claimed_at: null,
+      connection_status: 'stopped',
+      assigned_worker_id: null,
+      worker_pid: null,
+      last_worker_heartbeat: null
+    };
+  } else if (action === 'clear_error') {
+    update.last_error = null;
+  } else {
+    return json(res, 400, {
+      ok: false,
+      message: 'Invalid account action'
+    });
+  }
+
+  const { data, error } = await supabase
+    .from('mt5_accounts')
+    .update(update)
+    .eq('id', id)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+
+  return json(res, 200, {
+    ok: true,
+    account: data
+  });
+}
+
 async function handleEaPoll(req, res, supabase) {
   if (!requireEaSecret(req, res)) return;
 
@@ -1629,6 +1845,9 @@ export default async function handler(req, res) {
 
     if (route === 'admin_generate_key') return await handleAdminGenerateKey(req, res, supabase);
     if (route === 'admin_list_keys') return await handleAdminListKeys(req, res, supabase);
+    if (route === 'admin_dashboard') return await handleAdminDashboard(req, res, supabase);
+    if (route === 'admin_update_license') return await handleAdminUpdateLicense(req, res, supabase);
+    if (route === 'admin_update_account') return await handleAdminUpdateAccount(req, res, supabase);
 
     if (route === 'ea_poll') return await handleEaPoll(req, res, supabase);
     if (route === 'ea_update_command') return await handleEaUpdateCommand(req, res, supabase);
