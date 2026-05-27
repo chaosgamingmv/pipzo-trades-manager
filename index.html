@@ -82,6 +82,10 @@
           <span>Status</span>
           <strong id="workerStatus" class="status-off">Offline</strong>
         </article>
+        <article class="metric metric-wide">
+          <span>Algo Trade</span>
+          <strong id="algoStatus" class="status-off">Unknown</strong>
+        </article>
         <article class="metric">
           <span>Balance</span>
           <strong id="balance">$0.00</strong>
@@ -103,6 +107,9 @@
       <section class="vm-controls" aria-label="VM controls">
         <button id="startMt5Btn" class="action primary compact-action" type="button">
           <b>Start</b>
+        </button>
+        <button id="toggleAlgoBtn" class="action compact-action" type="button">
+          <b>Turn On</b>
         </button>
         <button class="action icon-action" data-command="refresh_status" type="button" aria-label="Refresh">
           <b>↻</b>

@@ -468,6 +468,7 @@ async function handleCreateCommand(req, res, supabase) {
     'close_side_profit',
     'breakeven_side',
     'modify_side',
+    'set_algo_trading',
     'refresh_status'
   ];
 
@@ -992,6 +993,8 @@ async function handleEaUpdateStatus(req, res, supabase) {
     free_margin: Number(body.free_margin || 0),
     floating_profit: Number(body.floating_profit || 0),
     open_trades: Number(body.open_trades || 0),
+    algo_trading_allowed: typeof body.algo_trading_allowed === 'boolean' ? body.algo_trading_allowed : null,
+    account_trade_allowed: typeof body.account_trade_allowed === 'boolean' ? body.account_trade_allowed : null,
     is_online: true,
     last_seen: new Date().toISOString(),
     updated_at: new Date().toISOString()

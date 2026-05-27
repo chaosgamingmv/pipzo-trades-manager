@@ -33,6 +33,7 @@ let selectedRequestType = 'both';
 let linkedAccounts = [];
 let selectedAccount = null;
 let selectedMt5AccountId = localStorage.getItem('pipzo_selected_mt5_account_id') || '';
+let latestAlgoTradingAllowed = null;
 
 
 function showScreen(screen) {
@@ -357,6 +358,27 @@ async function startSelectedMt5() {
   }
 }
 
+async function toggleAlgoTrading() {
+  const msg = document.getElementById('actionMsg');
+
+  if (!selectedMt5AccountId) {
+    msg.textContent = 'Please connect and select an MT5 account first.';
+    if (tg) tg.HapticFeedback?.notificationOccurred('error');
+    return;
+  }
+
+  const desiredState = latestAlgoTradingAllowed !== true;
+  msg.textContent = desiredState ? 'Turning Algo Trading ON...' : 'Turning Algo Trading OFF...';
+
+  const res = await sendCommand('set_algo_trading', {
+    enabled: desiredState
+  });
+
+  if (res.ok) {
+    setTimeout(loadStatus, 1800);
+  }
+}
+
 function createPercentButtons() {
   const options = [
     { label: '10%', value: 10 },
@@ -405,6 +427,11 @@ function bindSideControls() {
   const startBtn = document.getElementById('startMt5Btn');
   if (startBtn) {
     startBtn.addEventListener('click', startSelectedMt5);
+  }
+
+  const toggleAlgoBtn = document.getElementById('toggleAlgoBtn');
+  if (toggleAlgoBtn) {
+    toggleAlgoBtn.addEventListener('click', toggleAlgoTrading);
   }
 
   function sendModifySide(side) {
@@ -502,9 +529,18 @@ async function loadStatus() {
 
   const s = res.status;
 
+  const algoStatus = document.getElementById('algoStatus');
+  const toggleAlgoBtn = document.getElementById('toggleAlgoBtn');
+
   if (!s) {
     badge.className = 'status-off';
     badge.textContent = 'Offline';
+    latestAlgoTradingAllowed = null;
+    if (algoStatus) {
+      algoStatus.className = 'status-off';
+      algoStatus.textContent = 'Unknown';
+    }
+    if (toggleAlgoBtn) toggleAlgoBtn.querySelector('b').textContent = 'Turn On';
     document.getElementById('balance').textContent = money(0);
     document.getElementById('equity').textContent = money(0);
     document.getElementById('floating').textContent = money(0);
@@ -517,6 +553,25 @@ async function loadStatus() {
 
   badge.className = online ? 'status-on' : 'status-off';
   badge.textContent = online ? 'Online' : 'Offline';
+
+  latestAlgoTradingAllowed = s.algo_trading_allowed === true;
+
+  if (algoStatus) {
+    if (s.algo_trading_allowed === true) {
+      algoStatus.className = 'status-on';
+      algoStatus.textContent = 'On';
+    } else if (s.algo_trading_allowed === false) {
+      algoStatus.className = 'status-off';
+      algoStatus.textContent = 'Off';
+    } else {
+      algoStatus.className = 'status-off';
+      algoStatus.textContent = 'Unknown';
+    }
+  }
+
+  if (toggleAlgoBtn) {
+    toggleAlgoBtn.querySelector('b').textContent = latestAlgoTradingAllowed ? 'Turn Off' : 'Turn On';
+  }
 
   document.getElementById('balance').textContent = money(s.balance);
   document.getElementById('equity').textContent = money(s.equity);

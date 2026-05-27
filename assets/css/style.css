@@ -527,7 +527,7 @@ select.input option {
 /* VM controls */
 .vm-controls {
   display: grid;
-  grid-template-columns: 1fr 58px;
+  grid-template-columns: 1fr 1fr 58px;
   gap: 10px;
   margin: -2px 0 12px;
 }
@@ -861,6 +861,6 @@ select.input option {
 
 @media (max-width: 380px) {
   .vm-controls {
-    grid-template-columns: 1fr 54px;
+    grid-template-columns: 1fr 1fr 54px;
   }
 }

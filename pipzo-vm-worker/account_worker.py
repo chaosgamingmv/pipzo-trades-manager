@@ -2,6 +2,9 @@ import json
 import os
 import sys
 import time
+import subprocess
+import platform
+import ctypes
 from datetime import datetime
 from pathlib import Path
 
@@ -21,6 +24,22 @@ RECONNECT_SECONDS = int(os.getenv("RECONNECT_SECONDS", "10"))
 
 WORKER_ID = os.getenv("WORKER_ID", "VM-01")
 BASE_MT5_EXE_NAME = "terminal64.exe"
+AUTO_TRADING_CONFIG_NAME = "pipzo_autotrading.ini"
+AUTO_TRADING_CONFIG_SECTIONS = {
+    "Common": {
+        "AutoTrading": "1",
+        "EnableExperts": "1",
+        "AllowLiveTrading": "1",
+    },
+    "Experts": {
+        "AllowLiveTrading": "1",
+        "AllowAlgoTrading": "1",
+        "EnableExperts": "1",
+        "DisableAlgoTradingByAccount": "0",
+        "DisableAlgoTradingByProfile": "0",
+        "DisableAlgoTradingBySymbol": "0",
+    },
+}
 
 if len(sys.argv) < 2:
     raise RuntimeError("Usage: python account_worker.py account.json")
@@ -44,6 +63,7 @@ MT5_PASSWORD = ACCOUNT["mt5_password"]
 MT5_SERVER = ACCOUNT["mt5_server"]
 TERMINAL_DIR = Path(ACCOUNT["assigned_terminal_dir"])
 MT5_PATH = str(TERMINAL_DIR / BASE_MT5_EXE_NAME)
+MT5_PROCESS_PID = None
 
 
 def api_post(endpoint, payload):
@@ -98,12 +118,348 @@ def mt5_shutdown():
         pass
 
 
+
+def _set_ini_value(lines, section, key, value):
+    """Small INI updater that preserves existing MT5 config lines."""
+    section_header = f"[{section}]"
+    section_index = None
+
+    for i, line in enumerate(lines):
+        if line.strip().lower() == section_header.lower():
+            section_index = i
+            break
+
+    if section_index is None:
+        if lines and lines[-1].strip():
+            lines.append("\n")
+        lines.append(f"{section_header}\n")
+        lines.append(f"{key}={value}\n")
+        return lines
+
+    insert_at = len(lines)
+    key_index = None
+
+    for i in range(section_index + 1, len(lines)):
+        stripped = lines[i].strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            insert_at = i
+            break
+        if stripped.lower().startswith(f"{key.lower()}="):
+            key_index = i
+            break
+
+    if key_index is not None:
+        lines[key_index] = f"{key}={value}\n"
+    else:
+        lines.insert(insert_at, f"{key}={value}\n")
+
+    return lines
+
+
+def write_pipzo_autotrading_config():
+    """
+    Creates a custom MT5 startup config for this copied /portable terminal.
+
+    MetaTrader 5 supports launching terminal64.exe with /config:<file> and /portable.
+    The config is used to pre-load platform settings, including Expert Advisor / Algo Trading
+    permissions, so a new terminal copied for a user does not need manual VM access.
+    """
+    config_path = TERMINAL_DIR / AUTO_TRADING_CONFIG_NAME
+
+    lines = []
+    common_candidates = [
+        TERMINAL_DIR / "common.ini",
+        TERMINAL_DIR / "config" / "common.ini",
+        TERMINAL_DIR / "Config" / "common.ini",
+    ]
+
+    for candidate in common_candidates:
+        if candidate.exists():
+            try:
+                lines = candidate.read_text(encoding="utf-16", errors="ignore").splitlines(True)
+                break
+            except Exception:
+                try:
+                    lines = candidate.read_text(encoding="utf-8", errors="ignore").splitlines(True)
+                    break
+                except Exception:
+                    pass
+
+    if not lines:
+        lines = []
+
+    # Login config helps the terminal open directly on the right account.
+    login_settings = {
+        "Login": str(MT5_LOGIN),
+        "Password": str(MT5_PASSWORD),
+        "Server": str(MT5_SERVER),
+    }
+
+    for section, values in {
+        "Common": {**login_settings, **AUTO_TRADING_CONFIG_SECTIONS["Common"]},
+        "Experts": AUTO_TRADING_CONFIG_SECTIONS["Experts"],
+    }.items():
+        for key, value in values.items():
+            lines = _set_ini_value(lines, section, key, value)
+
+    config_path.write_text("".join(lines), encoding="utf-8")
+    log(f"MT5 auto-trading startup config prepared: {config_path}")
+    return config_path
+
+
+def patch_terminal_config_files():
+    """
+    Also patches common MT5 config locations inside the copied portable folder.
+    This helps if a broker/build ignores some custom config values after first launch.
+    """
+    candidates = [
+        TERMINAL_DIR / "common.ini",
+        TERMINAL_DIR / "config" / "common.ini",
+        TERMINAL_DIR / "Config" / "common.ini",
+    ]
+
+    for config_path in candidates:
+        try:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+
+            if config_path.exists():
+                try:
+                    lines = config_path.read_text(encoding="utf-8", errors="ignore").splitlines(True)
+                except Exception:
+                    lines = config_path.read_text(encoding="utf-16", errors="ignore").splitlines(True)
+            else:
+                lines = []
+
+            for section, values in AUTO_TRADING_CONFIG_SECTIONS.items():
+                for key, value in values.items():
+                    lines = _set_ini_value(lines, section, key, value)
+
+            config_path.write_text("".join(lines), encoding="utf-8")
+            log(f"Patched MT5 auto-trading config: {config_path}")
+        except Exception as e:
+            log(f"Could not patch MT5 config {config_path}: {e}")
+
+
+
+def is_windows():
+    return platform.system().lower() == "windows"
+
+
+def find_windows_for_pid(pid):
+    """Return visible top-level window handles owned by pid."""
+    if not is_windows() or not pid:
+        return []
+
+    user32 = ctypes.windll.user32
+    handles = []
+
+    EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+    def callback(hwnd, _):
+        if not user32.IsWindowVisible(hwnd):
+            return True
+
+        window_pid = ctypes.c_ulong()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(window_pid))
+
+        if int(window_pid.value) == int(pid):
+            handles.append(hwnd)
+
+        return True
+
+    user32.EnumWindows(EnumWindowsProc(callback), 0)
+    return handles
+
+
+def focus_window(hwnd):
+    """Bring an MT5 window to foreground so Ctrl+E reaches the correct terminal."""
+    if not is_windows() or not hwnd:
+        return False
+
+    user32 = ctypes.windll.user32
+    SW_RESTORE = 9
+
+    try:
+        user32.ShowWindow(hwnd, SW_RESTORE)
+        time.sleep(0.4)
+        user32.SetForegroundWindow(hwnd)
+        time.sleep(0.4)
+        return True
+    except Exception as e:
+        log(f"Could not focus MT5 window: {e}")
+        return False
+
+
+def send_ctrl_e_to_focused_window():
+    """Sends Ctrl+E, the MT5 Algo Trading hotkey."""
+    if not is_windows():
+        log("Ctrl+E auto-trading toggle is only supported on Windows.")
+        return False
+
+    user32 = ctypes.windll.user32
+    KEYEVENTF_KEYUP = 0x0002
+    VK_CONTROL = 0x11
+    VK_E = 0x45
+
+    try:
+        user32.keybd_event(VK_CONTROL, 0, 0, 0)
+        time.sleep(0.05)
+        user32.keybd_event(VK_E, 0, 0, 0)
+        time.sleep(0.05)
+        user32.keybd_event(VK_E, 0, KEYEVENTF_KEYUP, 0)
+        time.sleep(0.05)
+        user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
+        return True
+    except Exception as e:
+        log(f"Failed sending Ctrl+E: {e}")
+        return False
+
+
+def press_ctrl_e_for_this_terminal():
+    """
+    Press Ctrl+E only on this account's MT5 process/window.
+    This is the same as manually enabling the Algo Trading button in MT5.
+    """
+    if not is_windows():
+        log("Cannot press Ctrl+E because this worker is not running on Windows.")
+        return False
+
+    handles = find_windows_for_pid(MT5_PROCESS_PID)
+
+    if not handles:
+        log(
+            "Could not find visible MT5 window for this account process. "
+            "Make sure the worker runs in a logged-in Windows desktop session, not as a hidden service."
+        )
+        return False
+
+    hwnd = handles[0]
+
+    if not focus_window(hwnd):
+        return False
+
+    ok = send_ctrl_e_to_focused_window()
+    if ok:
+        log("Pressed Ctrl+E on this MT5 terminal to enable Algo Trading.")
+    return ok
+
+
+def bool_from_any(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value).strip().lower() in ("1", "true", "yes", "on", "enable", "enabled")
+
+
+def get_algo_trading_allowed():
+    try:
+        terminal_info = mt5.terminal_info()
+        return getattr(terminal_info, "trade_allowed", None) if terminal_info else None
+    except Exception:
+        return None
+
+
+def enable_algo_trading_if_needed(reason=""):
+    """
+    MT5's Auto/Algo Trading switch is the toolbar button toggled by Ctrl+E.
+    Config files alone are not always enough for new copied terminals, so we verify
+    terminal_info().trade_allowed and only press Ctrl+E when it is OFF.
+    """
+    try:
+        terminal_info = mt5.terminal_info()
+    except Exception:
+        terminal_info = None
+
+    current = getattr(terminal_info, "trade_allowed", None) if terminal_info else None
+
+    if current is True:
+        return True
+
+    if current is None:
+        log(
+            "Could not read MT5 terminal trade_allowed state. "
+            "Skipping Ctrl+E to avoid accidentally toggling Algo Trading off."
+        )
+        return False
+
+    log(f"MT5 Algo Trading is OFF. Enabling with Ctrl+E. Reason: {reason}")
+
+    if not press_ctrl_e_for_this_terminal():
+        return False
+
+    for _ in range(8):
+        time.sleep(0.75)
+        terminal_info = mt5.terminal_info()
+        allowed = getattr(terminal_info, "trade_allowed", None) if terminal_info else None
+        if allowed is True:
+            log("MT5 Algo Trading is now ON.")
+            return True
+
+    terminal_info = mt5.terminal_info()
+    allowed = getattr(terminal_info, "trade_allowed", None) if terminal_info else None
+    log(f"MT5 Algo Trading still appears OFF after Ctrl+E. trade_allowed={allowed}")
+    return False
+
+
+def set_algo_trading_enabled(desired_enabled):
+    desired_enabled = bool_from_any(desired_enabled)
+    current = get_algo_trading_allowed()
+
+    if current is desired_enabled:
+        log(f"MT5 Algo Trading already {'ON' if desired_enabled else 'OFF'}.")
+        return True
+
+    if desired_enabled:
+        return enable_algo_trading_if_needed("manual Mini App toggle")
+
+    log("Turning MT5 Algo Trading OFF with Ctrl+E from Mini App request.")
+
+    if not press_ctrl_e_for_this_terminal():
+        return False
+
+    for _ in range(8):
+        time.sleep(0.75)
+        current = get_algo_trading_allowed()
+        if current is False:
+            log("MT5 Algo Trading is now OFF.")
+            return True
+
+    current = get_algo_trading_allowed()
+    log(f"MT5 Algo Trading OFF request could not be confirmed. trade_allowed={current}")
+    return current is False
+
+
+def launch_terminal_before_initialize():
+    """
+    Opens MT5 with /portable and our custom config before Python attaches/logs in.
+    This makes the terminal open from Start without requiring manual VM access.
+    """
+    config_path = write_pipzo_autotrading_config()
+    patch_terminal_config_files()
+
+    try:
+        global MT5_PROCESS_PID
+        proc = subprocess.Popen(
+            [MT5_PATH, "/portable", f"/config:{config_path}"],
+            cwd=str(TERMINAL_DIR),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        MT5_PROCESS_PID = proc.pid
+        log(f"MT5 terminal launched with Pipzo auto-trading config. pid={MT5_PROCESS_PID}")
+        time.sleep(MT5_START_WAIT_SECONDS)
+    except Exception as e:
+        log(f"Could not pre-launch MT5 with config. Python initialize will still try. Error: {e}")
+
 def initialize_mt5():
     if not Path(MT5_PATH).exists():
         err = f"MT5 terminal not found: {MT5_PATH}"
         update_account_status("failed", err)
         log(err)
         return False
+
+    launch_terminal_before_initialize()
 
     log(f"Connecting account {MT5_LOGIN} using {MT5_PATH}")
 
@@ -133,6 +489,28 @@ def initialize_mt5():
         update_account_status("failed", err)
         log(err)
         return False
+
+    terminal_info = mt5.terminal_info()
+    terminal_trade_allowed = getattr(terminal_info, "trade_allowed", None) if terminal_info else None
+    account_trade_allowed = getattr(info, "trade_allowed", None)
+
+    if terminal_trade_allowed is False:
+        enable_algo_trading_if_needed("initial MT5 connection")
+        terminal_info = mt5.terminal_info()
+        terminal_trade_allowed = getattr(terminal_info, "trade_allowed", None) if terminal_info else None
+
+    if terminal_trade_allowed is False or account_trade_allowed is False:
+        log(
+            "WARNING: MT5 connected but trading permission is still false. "
+            f"terminal_trade_allowed={terminal_trade_allowed}, account_trade_allowed={account_trade_allowed}. "
+            "If account_trade_allowed is false, check broker/investor password/account permissions. "
+            "If terminal_trade_allowed is false, the worker could not toggle Ctrl+E."
+        )
+    else:
+        log(
+            "Trading permission check passed. "
+            f"terminal_trade_allowed={terminal_trade_allowed}, account_trade_allowed={account_trade_allowed}"
+        )
 
     update_account_status("connected", "", str(info.name), str(info.company))
     heartbeat("connected")
@@ -276,6 +654,10 @@ def send_status():
     ps = positions()
     floating = sum(float(p.profit) for p in ps)
 
+    terminal_info = mt5.terminal_info()
+    algo_trading_allowed = getattr(terminal_info, "trade_allowed", None) if terminal_info else None
+    account_trade_allowed = getattr(info, "trade_allowed", None)
+
     api_post("ea_update_status", {
         "license_key": LICENSE_KEY,
         "mt5_account": str(info.login),
@@ -289,6 +671,8 @@ def send_status():
         "free_margin": float(info.margin_free),
         "floating_profit": floating,
         "open_trades": len(ps),
+        "algo_trading_allowed": bool(algo_trading_allowed) if algo_trading_allowed is not None else None,
+        "account_trade_allowed": bool(account_trade_allowed) if account_trade_allowed is not None else None,
     })
 
     heartbeat("connected")
@@ -502,6 +886,18 @@ def breakeven(p):
 def execute_command(command):
     cmd = command.get("command")
     params = command.get("params") or {}
+
+    if cmd not in ("refresh_status", "set_algo_trading"):
+        if not enable_algo_trading_if_needed(f"before command {cmd}"):
+            return False, "MT5 Algo Trading is OFF. Worker tried Ctrl+E but could not confirm it is ON. Keep the VM user logged in and run the worker in the desktop session."
+
+    if cmd == "set_algo_trading":
+        enabled = bool_from_any(params.get("enabled", True))
+        ok = set_algo_trading_enabled(enabled)
+        send_status()
+        state = "ON" if enabled else "OFF"
+        return ok, f"Algo Trading turned {state}." if ok else f"Could not turn Algo Trading {state}. Keep the VM user logged in and run the worker in the desktop session."
+
     ps = positions()
 
     if cmd == "refresh_status":
