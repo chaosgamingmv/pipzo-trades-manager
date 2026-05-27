@@ -1153,6 +1153,63 @@ async function handleAdminUpdateLicense(req, res, supabase) {
       });
     }
     update.valid_until = new Date(`${valid_until}T23:59:59.000Z`).toISOString();
+  } else if (action === 'delete') {
+    const { data: current, error: currentError } = await supabase
+      .from('license_keys')
+      .select('id, license_key')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (currentError) throw currentError;
+
+    if (!current) {
+      return json(res, 404, {
+        ok: false,
+        message: 'License not found'
+      });
+    }
+
+    const licenseKey = current.license_key;
+
+    // Clean linked records first so deleted licenses do not leave users/accounts stuck.
+    await supabase
+      .from('mt5_accounts')
+      .delete()
+      .eq('license_key', licenseKey);
+
+    await supabase
+      .from('ea_commands')
+      .delete()
+      .eq('license_key', licenseKey);
+
+    await supabase
+      .from('ea_status')
+      .delete()
+      .eq('license_key', licenseKey);
+
+    await supabase
+      .from('open_trades')
+      .delete()
+      .eq('license_key', licenseKey);
+
+    await supabase
+      .from('app_users')
+      .update({ license_key: null })
+      .eq('license_key', licenseKey);
+
+    const { error: deleteError } = await supabase
+      .from('license_keys')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) throw deleteError;
+
+    return json(res, 200, {
+      ok: true,
+      deleted: true,
+      id,
+      license_key: licenseKey
+    });
   } else {
     return json(res, 400, {
       ok: false,

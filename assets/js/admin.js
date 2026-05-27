@@ -214,6 +214,7 @@ function renderLicenses() {
           <button class="ghost-btn" data-action="extend-license" data-id="${row.id}" data-days="30">+30d</button>
           <button class="ghost-btn" data-action="extend-license" data-id="${row.id}" data-days="7">+7d</button>
           <button class="${row.is_active ? 'danger-btn' : 'success-btn'}" data-action="toggle-license" data-id="${row.id}" data-active="${row.is_active ? 'false' : 'true'}">${row.is_active ? 'Disable' : 'Enable'}</button>
+          <button class="danger-btn" data-action="delete-license" data-id="${row.id}" data-key="${row.license_key || ''}">Delete</button>
         </div>
       </td>
     `;
@@ -344,7 +345,7 @@ async function updateLicenseRequest(id, action) {
 async function updateLicense(id, payload) {
   const res = await api('admin_update_license', { id, ...payload });
   if (!res.ok) return toast(res.message || 'Could not update license');
-  toast('License updated');
+  toast(payload.action === 'delete' ? 'License deleted' : 'License updated');
   await refreshAll();
 }
 
@@ -377,6 +378,13 @@ function bindTables() {
 
     if (action === 'toggle-license') {
       return updateLicense(id, { action: 'set_active', is_active: btn.dataset.active === 'true' });
+    }
+
+    if (action === 'delete-license') {
+      const key = btn.dataset.key || '';
+      const confirmed = confirm(`Delete this license permanently?${key ? `\n\n${key}` : ''}\n\nThis will also unlink the license from the user and remove linked MT5 account/command/status data.`);
+      if (!confirmed) return;
+      return updateLicense(id, { action: 'delete' });
     }
 
     if (action === 'reset-start') {
