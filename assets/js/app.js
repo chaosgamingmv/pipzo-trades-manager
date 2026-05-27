@@ -540,7 +540,11 @@ async function loadStatus() {
       algoStatus.className = 'status-off';
       algoStatus.textContent = 'Unknown';
     }
-    if (toggleAlgoBtn) toggleAlgoBtn.querySelector('b').textContent = 'Turn On';
+    if (toggleAlgoBtn) {
+      toggleAlgoBtn.querySelector('b').textContent = 'Turn On';
+      toggleAlgoBtn.classList.remove('is-on');
+      toggleAlgoBtn.setAttribute('aria-checked', 'false');
+    }
     document.getElementById('balance').textContent = money(0);
     document.getElementById('equity').textContent = money(0);
     document.getElementById('floating').textContent = money(0);
@@ -571,6 +575,8 @@ async function loadStatus() {
 
   if (toggleAlgoBtn) {
     toggleAlgoBtn.querySelector('b').textContent = latestAlgoTradingAllowed ? 'Turn Off' : 'Turn On';
+    toggleAlgoBtn.classList.toggle('is-on', latestAlgoTradingAllowed);
+    toggleAlgoBtn.setAttribute('aria-checked', latestAlgoTradingAllowed ? 'true' : 'false');
   }
 
   document.getElementById('balance').textContent = money(s.balance);

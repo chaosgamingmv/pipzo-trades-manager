@@ -78,14 +78,32 @@
       </header>
 
       <section class="metrics">
-        <article class="metric metric-wide">
-          <span>Status</span>
-          <strong id="workerStatus" class="status-off">Offline</strong>
+        <article class="metric metric-wide status-control-card">
+          <div class="status-copy">
+            <span>MT5 Status</span>
+            <strong id="workerStatus" class="status-off">Offline</strong>
+          </div>
+          <div class="status-actions">
+            <button id="startMt5Btn" class="status-btn status-btn-primary" type="button">
+              <b>Start</b>
+            </button>
+            <button class="status-icon-btn" data-command="refresh_status" type="button" aria-label="Refresh status">
+              <b>↻</b>
+            </button>
+          </div>
         </article>
-        <article class="metric metric-wide">
-          <span>Algo Trade</span>
-          <strong id="algoStatus" class="status-off">Unknown</strong>
+
+        <article class="metric metric-wide status-control-card">
+          <div class="status-copy">
+            <span>Manage Trades</span>
+            <strong id="algoStatus" class="status-off">Unknown</strong>
+          </div>
+          <button id="toggleAlgoBtn" class="switch-control" type="button" role="switch" aria-checked="false">
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+            <b>Turn On</b>
+          </button>
         </article>
+
         <article class="metric">
           <span>Balance</span>
           <strong id="balance">$0.00</strong>
@@ -102,18 +120,6 @@
           <span>Open trades</span>
           <strong id="openTrades">0</strong>
         </article>
-      </section>
-
-      <section class="vm-controls" aria-label="VM controls">
-        <button id="startMt5Btn" class="action primary compact-action" type="button">
-          <b>Start</b>
-        </button>
-        <button id="toggleAlgoBtn" class="action compact-action" type="button">
-          <b>Turn On</b>
-        </button>
-        <button class="action icon-action" data-command="refresh_status" type="button" aria-label="Refresh">
-          <b>↻</b>
-        </button>
       </section>
 
       <!-- MT5 ACCOUNT SECTION -->
