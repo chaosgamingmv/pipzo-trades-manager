@@ -293,6 +293,45 @@ async function handleMe(req, res, supabase) {
   });
 }
 
+
+function normalizeLicenseType(value) {
+  const v = String(value || 'both').toLowerCase().trim();
+  if (v === 'demo' || v === 'real' || v === 'both') return v;
+  return 'both';
+}
+
+function getMt5ServerAccountType(serverName) {
+  const server = String(serverName || '').toLowerCase();
+  if (server.includes('trial')) return 'demo';
+  if (server.includes('real')) return 'real';
+  return 'unknown';
+}
+
+function validateMt5ServerAgainstLicense(allowedType, serverName) {
+  const allowed = normalizeLicenseType(allowedType);
+  const detected = getMt5ServerAccountType(serverName);
+
+  if (detected === 'unknown') {
+    return {
+      ok: false,
+      detected,
+      message: 'Could not detect account type from server name. Demo servers must include "trial" and real servers must include "real".'
+    };
+  }
+
+  if (allowed === 'both' || allowed === detected) {
+    return { ok: true, detected };
+  }
+
+  return {
+    ok: false,
+    detected,
+    message: allowed === 'demo'
+      ? 'This license is Demo Only. Use an MT5 server that includes "trial".'
+      : 'This license is Real Only. Use an MT5 server that includes "real".'
+  };
+}
+
 async function handleRequestLicense(req, res, supabase) {
   const {
     initData = '',
@@ -300,7 +339,9 @@ async function handleRequestLicense(req, res, supabase) {
     note = ''
   } = req.body || {};
 
-  if (!['demo', 'real', 'both'].includes(request_type)) {
+  const requestType = normalizeLicenseType(request_type);
+
+  if (!['demo', 'real', 'both'].includes(requestType)) {
     return json(res, 400, {
       ok: false,
       message: 'Invalid request type'
@@ -325,16 +366,9 @@ async function handleRequestLicense(req, res, supabase) {
     });
   }
 
-  if (!process.env.TELEGRAM_BOT_TOKEN) {
-    return json(res, 500, {
-      ok: false,
-      message: 'Telegram bot token is not configured.'
-    });
-  }
-
   const { data: existingLicense, error: existingLicenseError } = await supabase
     .from('license_keys')
-    .select('license_key, valid_until')
+    .select('license_key, valid_until, allowed_account_type')
     .eq('telegram_id', telegramId)
     .eq('is_active', true)
     .maybeSingle();
@@ -342,103 +376,90 @@ async function handleRequestLicense(req, res, supabase) {
   if (existingLicenseError) throw existingLicenseError;
 
   if (existingLicense && new Date(existingLicense.valid_until).getTime() > Date.now()) {
-    const existingMessage =
-`✅ You already have an active Pipzo license
-
-Your license key is:
-
-${existingLicense.license_key}
-
-Valid Until: ${new Date(existingLicense.valid_until).toLocaleDateString('en-GB')}
-
-Open the Pipzo Mini App and paste this key to continue.`;
-
-    await sendTelegramMessage(telegramId, existingMessage);
-
     return json(res, 200, {
       ok: true,
-      message: 'You already have an active license. I sent it to your Telegram.',
-      license: existingLicense
+      message: 'You already have an active license. No new request was created.',
+      license: {
+        allowed_account_type: existingLicense.allowed_account_type,
+        valid_until: existingLicense.valid_until
+      }
     });
   }
 
-  const typeLabel =
-    request_type === 'demo'
-      ? 'Demo Only'
-      : request_type === 'real'
-        ? 'Real Only'
-        : 'Demo + Real';
+  const { data: pendingRequest, error: pendingRequestError } = await supabase
+    .from('license_requests')
+    .select('*')
+    .eq('telegram_id', telegramId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (pendingRequestError) throw pendingRequestError;
+
+  if (pendingRequest) {
+    return json(res, 200, {
+      ok: true,
+      message: 'You already have a pending license request. Please wait for admin approval.',
+      request: pendingRequest
+    });
+  }
 
   const displayName = `${firstName || ''} ${lastName || ''}`.trim() || 'Unknown';
 
-  const autoDays = Number(process.env.AUTO_LICENSE_DAYS || 30);
-  const validUntil = new Date(Date.now() + autoDays * 24 * 60 * 60 * 1000).toISOString();
-
-  const key = generateLicenseKey();
-
-  const { data: license, error: licenseError } = await supabase
-    .from('license_keys')
+  const { data: request, error: requestError } = await supabase
+    .from('license_requests')
     .insert({
-      license_key: key,
-      label: `${displayName} - Auto Request`,
       telegram_id: telegramId,
       telegram_username: username,
-      allowed_account_type: request_type,
-      valid_until: validUntil,
-      is_active: true
+      first_name: firstName,
+      last_name: lastName,
+      request_type: requestType,
+      note,
+      status: 'pending',
+      updated_at: new Date().toISOString()
     })
     .select()
     .single();
 
-  if (licenseError) throw licenseError;
+  if (requestError) throw requestError;
 
-  const userMessage =
-`✅ Pipzo License Approved
-
-Your license key is:
-
-${key}
-
-Access Type: ${typeLabel}
-Valid Until: ${new Date(validUntil).toLocaleDateString('en-GB')}
-
-Open the Pipzo Mini App and paste this key to continue.`;
+  const typeLabel =
+    requestType === 'demo'
+      ? 'Demo Only'
+      : requestType === 'real'
+        ? 'Real Only'
+        : 'Demo + Real';
 
   try {
-    await sendTelegramMessage(telegramId, userMessage);
-  } catch (error) {
-    return json(res, 500, {
-      ok: false,
-      message: `License created, but could not send message to user: ${error.message}`,
-      license: {
-        license_key: key,
-        allowed_account_type: request_type,
-        valid_until: validUntil
-      }
-    });
+    await sendTelegramMessage(telegramId,
+`✅ Pipzo License Request Received
+
+Your request is now pending admin approval.
+
+Requested Access: ${typeLabel}
+
+You will receive your license key here after admin approves your request.`);
+  } catch {
+    // Do not fail the request if only Telegram notification fails.
   }
 
   const adminChatId = process.env.ADMIN_TELEGRAM_ID;
 
   if (adminChatId) {
-    const adminMessage =
-`🔐 Auto License Generated
+    try {
+      await sendTelegramMessage(adminChatId,
+`🕒 New Pipzo License Request
 
 👤 Name: ${displayName}
 📱 Username: ${username ? '@' + username : 'No username'}
 🆔 Telegram ID: ${telegramId}
-
 📌 Access: ${typeLabel}
-🗓 Valid Until: ${new Date(validUntil).toLocaleDateString('en-GB')}
-
-🔑 Key:
-${key}
 
 📝 Note:
-${note || 'No note'}`;
+${note || 'No note'}
 
-    try {
-      await sendTelegramMessage(adminChatId, adminMessage);
+Open the Pipzo Admin Panel to approve or reject.`);
     } catch {
       // Do not fail the user if only the admin notification fails.
     }
@@ -446,12 +467,8 @@ ${note || 'No note'}`;
 
   return json(res, 200, {
     ok: true,
-    message: 'License key generated and sent to your Telegram.',
-    license: {
-      license_key: license.license_key,
-      allowed_account_type: license.allowed_account_type,
-      valid_until: license.valid_until
-    }
+    message: 'License request sent. Admin will review and approve it.',
+    request
   });
 }
 
@@ -889,11 +906,169 @@ async function safeSelect(supabase, table, queryBuilder) {
   }
 }
 
+
+async function handleAdminUpdateLicenseRequest(req, res, supabase) {
+  if (!requireAdminPassword(req, res)) return;
+
+  const {
+    id = '',
+    action = '',
+    admin_note = ''
+  } = req.body || {};
+
+  if (!id) {
+    return json(res, 400, {
+      ok: false,
+      message: 'Request id is required'
+    });
+  }
+
+  const { data: request, error: requestError } = await supabase
+    .from('license_requests')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (requestError) throw requestError;
+
+  if (!request) {
+    return json(res, 404, {
+      ok: false,
+      message: 'License request not found'
+    });
+  }
+
+  if (request.status !== 'pending') {
+    return json(res, 400, {
+      ok: false,
+      message: 'This request has already been reviewed'
+    });
+  }
+
+  if (action === 'reject') {
+    const { data: updated, error: updateError } = await supabase
+      .from('license_requests')
+      .update({
+        status: 'rejected',
+        admin_note,
+        reviewed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (updateError) throw updateError;
+
+    try {
+      await sendTelegramMessage(request.telegram_id,
+`❌ Pipzo License Request Rejected
+
+Your license request was not approved.${admin_note ? `\n\nAdmin note: ${admin_note}` : ''}`);
+    } catch {
+      // Telegram notification failure should not revert admin action.
+    }
+
+    return json(res, 200, {
+      ok: true,
+      message: 'License request rejected',
+      request: updated
+    });
+  }
+
+  if (action !== 'approve') {
+    return json(res, 400, {
+      ok: false,
+      message: 'Invalid request action'
+    });
+  }
+
+  const { data: existingLicense, error: existingLicenseError } = await supabase
+    .from('license_keys')
+    .select('license_key, valid_until')
+    .eq('telegram_id', request.telegram_id)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (existingLicenseError) throw existingLicenseError;
+
+  if (existingLicense && new Date(existingLicense.valid_until).getTime() > Date.now()) {
+    return json(res, 400, {
+      ok: false,
+      message: 'This Telegram user already has an active license.'
+    });
+  }
+
+  const autoDays = Number(process.env.AUTO_LICENSE_DAYS || 30);
+  const validUntil = new Date(Date.now() + autoDays * 24 * 60 * 60 * 1000).toISOString();
+  const key = generateLicenseKey();
+  const displayName = `${request.first_name || ''}`.trim() || request.telegram_username || request.telegram_id || 'User';
+  const requestType = normalizeLicenseType(request.request_type);
+
+  const { data: license, error: licenseError } = await supabase
+    .from('license_keys')
+    .insert({
+      license_key: key,
+      label: `${displayName} - Approved Request`,
+      telegram_id: request.telegram_id,
+      telegram_username: request.telegram_username,
+      allowed_account_type: requestType,
+      valid_until: validUntil,
+      is_active: true
+    })
+    .select('*')
+    .single();
+
+  if (licenseError) throw licenseError;
+
+  const { data: updated, error: updateError } = await supabase
+    .from('license_requests')
+    .update({
+      status: 'approved',
+      license_key: key,
+      admin_note,
+      reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', id)
+    .select('*')
+    .single();
+
+  if (updateError) throw updateError;
+
+  const typeLabel =
+    requestType === 'demo'
+      ? 'Demo Only'
+      : requestType === 'real'
+        ? 'Real Only'
+        : 'Demo + Real';
+
+  await sendTelegramMessage(request.telegram_id,
+`✅ Pipzo License Approved
+
+Your license key is:
+
+${key}
+
+Access Type: ${typeLabel}
+Valid Until: ${new Date(validUntil).toLocaleDateString('en-GB')}
+
+Open the Pipzo Mini App and paste this key to continue.`);
+
+  return json(res, 200, {
+    ok: true,
+    message: 'License request approved and key sent to user',
+    request: updated,
+    license
+  });
+}
+
 async function handleAdminDashboard(req, res, supabase) {
   if (!requireAdminPassword(req, res)) return;
 
-  const [licenses, users, accountsRaw, commands, statuses] = await Promise.all([
+  const [licenses, requests, users, accountsRaw, commands, statuses] = await Promise.all([
     safeSelect(supabase, 'license_keys', q => q.select('*').order('created_at', { ascending: false }).limit(300)),
+    safeSelect(supabase, 'license_requests', q => q.select('*').order('created_at', { ascending: false }).limit(300)),
     safeSelect(supabase, 'app_users', q => q.select('*').order('created_at', { ascending: false }).limit(300)),
     safeSelect(supabase, 'mt5_accounts', q => q.select('*').order('created_at', { ascending: false }).limit(300)),
     safeSelect(supabase, 'ea_commands', q => q.select('*').order('created_at', { ascending: false }).limit(80)),
@@ -925,6 +1100,7 @@ async function handleAdminDashboard(req, res, supabase) {
   return json(res, 200, {
     ok: true,
     licenses,
+    requests,
     users,
     accounts,
     commands
@@ -1296,6 +1472,17 @@ async function handleSaveMt5Account(req, res, supabase) {
     return json(res, 403, {
       ok: false,
       message: 'License expired or inactive'
+    });
+  }
+
+  const serverValidation = validateMt5ServerAgainstLicense(license.allowed_account_type, mt5_server);
+
+  if (!serverValidation.ok) {
+    return json(res, 403, {
+      ok: false,
+      message: serverValidation.message,
+      allowed_account_type: license.allowed_account_type,
+      detected_account_type: serverValidation.detected
     });
   }
 
@@ -1847,6 +2034,7 @@ export default async function handler(req, res) {
     if (route === 'admin_list_keys') return await handleAdminListKeys(req, res, supabase);
     if (route === 'admin_dashboard') return await handleAdminDashboard(req, res, supabase);
     if (route === 'admin_update_license') return await handleAdminUpdateLicense(req, res, supabase);
+    if (route === 'admin_update_license_request') return await handleAdminUpdateLicenseRequest(req, res, supabase);
     if (route === 'admin_update_account') return await handleAdminUpdateAccount(req, res, supabase);
 
     if (route === 'ea_poll') return await handleEaPoll(req, res, supabase);

@@ -103,6 +103,11 @@ async function checkMe() {
     await loadMt5Account();
     await loadStatus();
   } else {
+    const pending = localStorage.getItem('pipzo_license_request_pending');
+    if (pending === 'yes') {
+      const requestMsg = document.getElementById('requestMsg');
+      if (requestMsg) requestMsg.textContent = 'Your license request is pending admin approval.';
+    }
     showScreen(licenseScreen);
   }
 }
@@ -167,9 +172,10 @@ document.getElementById('requestLicenseBtn').addEventListener('click', async () 
   btn.textContent = 'Send Request';
 
   if (res.ok) {
-    msg.textContent = 'Request sent. Admin will review it.';
+    msg.textContent = res.message || 'Request sent. Admin will review it and send your key after approval.';
+    localStorage.setItem('pipzo_license_request_pending', 'yes');
   } else {
-    msg.textContent = res.message || 'Request option is not enabled yet. Contact admin for a key.';
+    msg.textContent = res.message || 'Could not send request. Contact admin.';
   }
 });
 

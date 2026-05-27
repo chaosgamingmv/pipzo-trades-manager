@@ -53,11 +53,13 @@
         <div class="stat-card"><span>Expired Licenses</span><strong id="statExpiredLicenses">0</strong></div>
         <div class="stat-card"><span>MT5 Online</span><strong id="statOnlineAccounts">0</strong></div>
         <div class="stat-card"><span>MT5 Offline</span><strong id="statOfflineAccounts">0</strong></div>
+        <div class="stat-card"><span>Pending Requests</span><strong id="statPendingRequests">0</strong></div>
         <div class="stat-card"><span>Pending Commands</span><strong id="statPendingCommands">0</strong></div>
       </section>
 
       <nav class="tabs" aria-label="Admin sections">
         <button class="tab active" data-tab="licenses">Licenses</button>
+        <button class="tab" data-tab="requests">Requests</button>
         <button class="tab" data-tab="users">Users</button>
         <button class="tab" data-tab="accounts">MT5 Accounts</button>
         <button class="tab" data-tab="commands">Commands</button>
@@ -116,6 +118,35 @@
                 </tr>
               </thead>
               <tbody id="licensesTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+
+
+      <section id="tab-requests" class="tab-panel">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Approval Queue</p>
+              <h2>License Requests</h2>
+            </div>
+            <input id="requestSearch" class="search-input" placeholder="Search requests, username, Telegram ID...">
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Access</th>
+                  <th>Note</th>
+                  <th>Status</th>
+                  <th>Requested</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="requestsTable"></tbody>
             </table>
           </div>
         </section>

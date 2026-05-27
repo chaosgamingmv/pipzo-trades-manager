@@ -5,6 +5,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   adminPassword: localStorage.getItem('pipzo_admin_password') || '',
   licenses: [],
+  requests: [],
   users: [],
   accounts: [],
   commands: []
@@ -22,10 +23,12 @@ const els = {
   generateBtn: $('generateBtn'),
   generatedKey: $('generatedKey'),
   licensesTable: $('licensesTable'),
+  requestsTable: $('requestsTable'),
   usersTable: $('usersTable'),
   accountsTable: $('accountsTable'),
   commandsTable: $('commandsTable'),
   licenseSearch: $('licenseSearch'),
+  requestSearch: $('requestSearch'),
   userSearch: $('userSearch'),
   accountSearch: $('accountSearch'),
   toast: $('toast')
@@ -110,6 +113,7 @@ async function unlock() {
 
 function applyAdminData(res) {
   state.licenses = res.licenses || [];
+  state.requests = res.requests || [];
   state.users = res.users || [];
   state.accounts = res.accounts || [];
   state.commands = res.commands || [];
@@ -117,6 +121,7 @@ function applyAdminData(res) {
   const activeLicenses = state.licenses.filter(x => x.is_active && !isExpired(x.valid_until)).length;
   const expiredLicenses = state.licenses.filter(x => isExpired(x.valid_until)).length;
   const onlineAccounts = state.accounts.filter(accountOnline).length;
+  const pendingRequests = state.requests.filter(x => String(x.status || '').toLowerCase() === 'pending').length;
   const pendingCommands = state.commands.filter(x => ['pending', 'processing'].includes(String(x.status || '').toLowerCase())).length;
 
   $('statUsers').textContent = state.users.length;
@@ -124,9 +129,11 @@ function applyAdminData(res) {
   $('statExpiredLicenses').textContent = expiredLicenses;
   $('statOnlineAccounts').textContent = onlineAccounts;
   $('statOfflineAccounts').textContent = Math.max(state.accounts.length - onlineAccounts, 0);
+  $('statPendingRequests').textContent = pendingRequests;
   $('statPendingCommands').textContent = pendingCommands;
 
   renderLicenses();
+  renderRequests();
   renderUsers();
   renderAccounts();
   renderCommands();
@@ -146,6 +153,43 @@ async function refreshAll() {
 
   applyAdminData(res);
   toast('Updated');
+}
+
+
+function typeLabel(value) {
+  if (value === 'demo') return 'Demo Only';
+  if (value === 'real') return 'Real Only';
+  return 'Demo + Real';
+}
+
+function renderRequests() {
+  if (!els.requestsTable) return;
+  const term = els.requestSearch ? els.requestSearch.value.trim() : '';
+  const rows = state.requests.filter(row => textIncludes(row, term));
+
+  els.requestsTable.innerHTML = rows.length ? '' : `<tr><td colspan="6">No license requests found.</td></tr>`;
+
+  rows.forEach(row => {
+    const name = [row.first_name, row.last_name].filter(Boolean).join(' ') || row.telegram_username || row.telegram_id || 'Unknown';
+    const username = row.telegram_username ? '@' + row.telegram_username : '';
+    const status = String(row.status || 'pending').toLowerCase();
+    const statusType = status === 'approved' ? 'green' : status === 'rejected' ? 'red' : 'yellow';
+    const actionButtons = status === 'pending'
+      ? `<button class="success-btn" data-action="approve-request" data-id="${row.id}">Approve</button>
+         <button class="danger-btn" data-action="reject-request" data-id="${row.id}">Reject</button>`
+      : `<span class="muted">${row.license_key ? `<code>${row.license_key}</code>` : '-'}</span>`;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${name}</strong><br><span class="muted">${username || row.telegram_id || '-'}</span></td>
+      <td>${typeLabel(row.request_type)}</td>
+      <td>${row.note || '-'}</td>
+      <td>${statusPill(row.status || 'pending', statusType)}${row.admin_note ? `<br><span class="muted">${row.admin_note}</span>` : ''}</td>
+      <td>${fmtDate(row.created_at)}</td>
+      <td><div class="row-actions">${actionButtons}</div></td>
+    `;
+    els.requestsTable.appendChild(tr);
+  });
 }
 
 function renderLicenses() {
@@ -279,6 +323,24 @@ async function generateLicense() {
   await refreshAll();
 }
 
+
+async function updateLicenseRequest(id, action) {
+  let adminNote = '';
+  if (action === 'reject') {
+    adminNote = prompt('Optional rejection note:') || '';
+  }
+
+  const res = await api('admin_update_license_request', {
+    id,
+    action,
+    admin_note: adminNote
+  });
+
+  if (!res.ok) return toast(res.message || 'Could not update request');
+  toast(action === 'approve' ? 'Request approved and license sent' : 'Request rejected');
+  await refreshAll();
+}
+
 async function updateLicense(id, payload) {
   const res = await api('admin_update_license', { id, ...payload });
   if (!res.ok) return toast(res.message || 'Could not update license');
@@ -300,6 +362,14 @@ function bindTables() {
 
     const id = btn.dataset.id;
     const action = btn.dataset.action;
+
+    if (action === 'approve-request') {
+      return updateLicenseRequest(id, 'approve');
+    }
+
+    if (action === 'reject-request') {
+      return updateLicenseRequest(id, 'reject');
+    }
 
     if (action === 'extend-license') {
       return updateLicense(id, { action: 'extend', days: Number(btn.dataset.days || 30) });
@@ -359,6 +429,7 @@ els.refreshAllBtn.addEventListener('click', refreshAll);
 els.refreshCommandsBtn.addEventListener('click', refreshAll);
 els.generateBtn.addEventListener('click', generateLicense);
 els.licenseSearch.addEventListener('input', renderLicenses);
+if (els.requestSearch) els.requestSearch.addEventListener('input', renderRequests);
 els.userSearch.addEventListener('input', renderUsers);
 els.accountSearch.addEventListener('input', renderAccounts);
 
