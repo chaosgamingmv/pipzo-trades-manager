@@ -177,7 +177,8 @@ function renderRequests() {
     const actionButtons = status === 'pending'
       ? `<button class="success-btn" data-action="approve-request" data-id="${row.id}">Approve</button>
          <button class="danger-btn" data-action="reject-request" data-id="${row.id}">Reject</button>`
-      : `<span class="muted">${row.license_key ? `<code>${row.license_key}</code>` : '-'}</span>`;
+      : `<span class="muted">${row.license_key ? `<code>${row.license_key}</code>` : '-'}</span>
+         ${status === 'approved' && row.license_key ? `<button class="ghost-btn" data-action="resend-license-message" data-id="${row.id}">Send Key</button>` : ''}`;
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -338,8 +339,17 @@ async function updateLicenseRequest(id, action) {
   });
 
   if (!res.ok) return toast(res.message || 'Could not update request');
-  toast(action === 'approve' ? 'Request approved and license sent' : 'Request rejected');
+  toast(res.message || (action === 'approve' ? 'Request approved' : 'Request rejected'));
   await refreshAll();
+}
+
+async function resendLicenseMessage(id) {
+  const res = await api('admin_resend_license_message', {
+    request_id: id
+  });
+
+  if (!res.ok) return toast(res.message || 'Could not send license message');
+  toast(res.message || 'License message sent');
 }
 
 async function updateLicense(id, payload) {
@@ -370,6 +380,10 @@ function bindTables() {
 
     if (action === 'reject-request') {
       return updateLicenseRequest(id, 'reject');
+    }
+
+    if (action === 'resend-license-message') {
+      return resendLicenseMessage(id);
     }
 
     if (action === 'extend-license') {

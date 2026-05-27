@@ -122,7 +122,13 @@ async function sendTelegramMessage(chatId, text) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
   if (!botToken) {
-    throw new Error('Missing TELEGRAM_BOT_TOKEN.');
+    throw new Error('Missing TELEGRAM_BOT_TOKEN in Vercel environment variables.');
+  }
+
+  const cleanChatId = String(chatId || '').trim();
+
+  if (!cleanChatId) {
+    throw new Error('Missing Telegram chat id.');
   }
 
   const telegramRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
@@ -131,15 +137,17 @@ async function sendTelegramMessage(chatId, text) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      chat_id: chatId,
-      text
+      chat_id: cleanChatId,
+      text,
+      disable_web_page_preview: true
     })
   });
 
-  const telegramData = await telegramRes.json();
+  const telegramData = await telegramRes.json().catch(() => null);
 
-  if (!telegramData.ok) {
-    throw new Error(telegramData.description || 'Could not send Telegram message.');
+  if (!telegramRes.ok || !telegramData || !telegramData.ok) {
+    const description = telegramData?.description || `Telegram API HTTP ${telegramRes.status}`;
+    throw new Error(description);
   }
 
   return telegramData;
@@ -1043,7 +1051,11 @@ Your license request was not approved.${admin_note ? `\n\nAdmin note: ${admin_no
         ? 'Real Only'
         : 'Demo + Real';
 
-  await sendTelegramMessage(request.telegram_id,
+  let telegramSent = false;
+  let telegramError = '';
+
+  try {
+    await sendTelegramMessage(request.telegram_id,
 `✅ Pipzo License Approved
 
 Your license key is:
@@ -1054,12 +1066,134 @@ Access Type: ${typeLabel}
 Valid Until: ${new Date(validUntil).toLocaleDateString('en-GB')}
 
 Open the Pipzo Mini App and paste this key to continue.`);
+    telegramSent = true;
+  } catch (err) {
+    telegramError = err?.message || 'Telegram message failed.';
+  }
 
   return json(res, 200, {
     ok: true,
-    message: 'License request approved and key sent to user',
+    message: telegramSent
+      ? 'License request approved and key sent to user'
+      : `License request approved, but Telegram message failed: ${telegramError}`,
+    telegram_sent: telegramSent,
+    telegram_error: telegramError,
     request: updated,
     license
+  });
+}
+
+async function handleAdminResendLicenseMessage(req, res, supabase) {
+  if (!requireAdminPassword(req, res)) return;
+
+  const {
+    request_id = '',
+    license_id = ''
+  } = req.body || {};
+
+  let request = null;
+  let license = null;
+
+  if (request_id) {
+    const { data, error } = await supabase
+      .from('license_requests')
+      .select('*')
+      .eq('id', request_id)
+      .maybeSingle();
+
+    if (error) throw error;
+    request = data;
+
+    if (!request) {
+      return json(res, 404, {
+        ok: false,
+        message: 'License request not found'
+      });
+    }
+
+    const licenseKey = request.license_key || '';
+
+    if (licenseKey) {
+      const { data: licenseData, error: licenseError } = await supabase
+        .from('license_keys')
+        .select('*')
+        .eq('license_key', licenseKey)
+        .maybeSingle();
+
+      if (licenseError) throw licenseError;
+      license = licenseData;
+    }
+
+    if (!license) {
+      const { data: licenseData, error: licenseError } = await supabase
+        .from('license_keys')
+        .select('*')
+        .eq('telegram_id', request.telegram_id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (licenseError) throw licenseError;
+      license = licenseData;
+    }
+  } else if (license_id) {
+    const { data, error } = await supabase
+      .from('license_keys')
+      .select('*')
+      .eq('id', license_id)
+      .maybeSingle();
+
+    if (error) throw error;
+    license = data;
+
+    if (!license) {
+      return json(res, 404, {
+        ok: false,
+        message: 'License not found'
+      });
+    }
+  }
+
+  if (!license) {
+    return json(res, 404, {
+      ok: false,
+      message: 'Approved license was not found for this request.'
+    });
+  }
+
+  const chatId = request?.telegram_id || license.telegram_id;
+
+  if (!chatId) {
+    return json(res, 400, {
+      ok: false,
+      message: 'This license has no Telegram ID to send the message to.'
+    });
+  }
+
+  const requestType = normalizeLicenseType(license.allowed_account_type || request?.request_type);
+  const typeLabel =
+    requestType === 'demo'
+      ? 'Demo Only'
+      : requestType === 'real'
+        ? 'Real Only'
+        : 'Demo + Real';
+
+  await sendTelegramMessage(chatId,
+`✅ Pipzo License Approved
+
+Your license key is:
+
+${license.license_key}
+
+Access Type: ${typeLabel}
+Valid Until: ${new Date(license.valid_until).toLocaleDateString('en-GB')}
+
+Open the Pipzo Mini App and paste this key to continue.`);
+
+  return json(res, 200, {
+    ok: true,
+    message: 'License key message sent to user'
   });
 }
 
@@ -2092,6 +2226,7 @@ export default async function handler(req, res) {
     if (route === 'admin_dashboard') return await handleAdminDashboard(req, res, supabase);
     if (route === 'admin_update_license') return await handleAdminUpdateLicense(req, res, supabase);
     if (route === 'admin_update_license_request') return await handleAdminUpdateLicenseRequest(req, res, supabase);
+    if (route === 'admin_resend_license_message') return await handleAdminResendLicenseMessage(req, res, supabase);
     if (route === 'admin_update_account') return await handleAdminUpdateAccount(req, res, supabase);
 
     if (route === 'ea_poll') return await handleEaPoll(req, res, supabase);
