@@ -644,6 +644,19 @@ def set_sltp_side(side, sl_points=0, tp_points=0):
     return modified, total
 
 
+def set_sltp_side_price(side, sl_price=0, tp_price=0):
+    modified = 0
+    total = 0
+    failed = 0
+    for p in filter_positions(side=side):
+        total += 1
+        if set_sltp_price(p, sl_price, tp_price):
+            modified += 1
+        else:
+            failed += 1
+    return modified, total, failed
+
+
 def send_status():
     if not ensure_connected():
         return
@@ -837,17 +850,54 @@ def close_position(p, volume=None):
     return False
 
 def modify_position(p, sl=None, tp=None):
+    symbol = str(p.symbol)
+    if not mt5.symbol_select(symbol, True):
+        log(f"Modify failed ticket {p.ticket}: symbol_select failed for {symbol} | last_error={mt5.last_error()}")
+        return False
+
+    info = mt5.symbol_info(symbol)
+    digits = int(getattr(info, "digits", 5) or 5) if info else 5
+
+    next_sl = float(sl if sl is not None else p.sl or 0)
+    next_tp = float(tp if tp is not None else p.tp or 0)
+
+    if next_sl > 0:
+        next_sl = round(next_sl, digits)
+    if next_tp > 0:
+        next_tp = round(next_tp, digits)
+
     req = {
         "action": mt5.TRADE_ACTION_SLTP,
-        "symbol": p.symbol,
-        "position": p.ticket,
-        "sl": float(sl if sl is not None else p.sl),
-        "tp": float(tp if tp is not None else p.tp),
+        "symbol": symbol,
+        "position": int(p.ticket),
+        "sl": next_sl,
+        "tp": next_tp,
         "magic": int(p.magic),
         "comment": "Pipzo master modify",
     }
+
+    log(
+        f"Modify request | ticket={p.ticket} | side={side_name(p)} | symbol={symbol} | "
+        f"open={p.price_open} | old_sl={p.sl} | old_tp={p.tp} | new_sl={next_sl} | new_tp={next_tp}"
+    )
+
     r = mt5.order_send(req)
-    return bool(r and r.retcode == mt5.TRADE_RETCODE_DONE)
+    if r is None:
+        log(f"Modify failed ticket {p.ticket}: order_send returned None | last_error={mt5.last_error()}")
+        return False
+
+    retcode = getattr(r, "retcode", None)
+    comment = getattr(r, "comment", "")
+
+    if retcode in (mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_DONE_PARTIAL):
+        log(f"Modify done ticket {p.ticket} | retcode={retcode} | comment={comment}")
+        return True
+
+    log(
+        f"Modify failed ticket {p.ticket} | retcode={retcode} | comment={comment} | "
+        f"request={req} | last_error={mt5.last_error()}"
+    )
+    return False
 
 
 def set_sltp(p, sl_points=0, tp_points=0):
@@ -857,8 +907,8 @@ def set_sltp(p, sl_points=0, tp_points=0):
     point = float(s.point)
     digits = int(s.digits)
     open_price = float(p.price_open)
-    sl = float(p.sl)
-    tp = float(p.tp)
+    sl = float(p.sl or 0)
+    tp = float(p.tp or 0)
 
     if p.type == mt5.POSITION_TYPE_BUY:
         if sl_points > 0:
@@ -870,6 +920,18 @@ def set_sltp(p, sl_points=0, tp_points=0):
             sl = round(open_price + sl_points * point, digits)
         if tp_points > 0:
             tp = round(open_price - tp_points * point, digits)
+
+    return modify_position(p, sl, tp)
+
+
+def set_sltp_price(p, sl_price=0, tp_price=0):
+    sl = float(p.sl or 0)
+    tp = float(p.tp or 0)
+
+    if float(sl_price or 0) > 0:
+        sl = float(sl_price)
+    if float(tp_price or 0) > 0:
+        tp = float(tp_price)
 
     return modify_position(p, sl, tp)
 
@@ -997,14 +1059,28 @@ def execute_command(command):
 
     if cmd == "modify_side":
         side = str(params.get("side", "")).lower()
+        sl_price = float(params.get("sl_price", 0) or 0)
+        tp_price = float(params.get("tp_price", 0) or 0)
+
+        # Backward compatibility for older Mini App builds that sent points.
         sl_points = int(float(params.get("sl_points", 0) or 0))
         tp_points = int(float(params.get("tp_points", 0) or 0))
 
         if side not in ("buy", "sell"):
             return False, "Invalid side. Use buy or sell."
 
+        if sl_price > 0 or tp_price > 0:
+            modified, total, failed = set_sltp_side_price(side, sl_price=max(sl_price, 0), tp_price=max(tp_price, 0))
+            changed = []
+            if sl_price > 0:
+                changed.append(f"SL price {sl_price}")
+            if tp_price > 0:
+                changed.append(f"TP price {tp_price}")
+            changed_text = " and ".join(changed)
+            return True, f"Modified {changed_text} on {modified}/{total} {side.upper()} trades. Failed: {failed}."
+
         if sl_points <= 0 and tp_points <= 0:
-            return False, "Nothing to modify. Enter SL points or TP points greater than 0."
+            return False, "Nothing to modify. Enter an SL price or TP price first."
 
         modified, total = set_sltp_side(side, sl_points=max(sl_points, 0), tp_points=max(tp_points, 0))
         changed = []

@@ -435,22 +435,22 @@ function bindSideControls() {
   }
 
   function sendModifySide(side) {
-    const slInput = document.getElementById(`${side}SlPoints`);
-    const tpInput = document.getElementById(`${side}TpPoints`);
-    const slPoints = Number(slInput?.value || 0);
-    const tpPoints = Number(tpInput?.value || 0);
+    const slInput = document.getElementById(`${side}SlPrice`);
+    const tpInput = document.getElementById(`${side}TpPrice`);
+    const slPrice = Number(slInput?.value || 0);
+    const tpPrice = Number(tpInput?.value || 0);
     const msg = document.getElementById('actionMsg');
 
-    if (slPoints <= 0 && tpPoints <= 0) {
-      msg.textContent = 'Enter SL points or TP points greater than 0 before modifying trades.';
+    if (slPrice <= 0 && tpPrice <= 0) {
+      msg.textContent = 'Enter an SL price or TP price before modifying trades.';
       if (tg) tg.HapticFeedback?.notificationOccurred('error');
       return;
     }
 
     sendCommand('modify_side', {
       side,
-      sl_points: slPoints > 0 ? slPoints : 0,
-      tp_points: tpPoints > 0 ? tpPoints : 0
+      sl_price: slPrice > 0 ? slPrice : 0,
+      tp_price: tpPrice > 0 ? tpPrice : 0
     });
   }
 
